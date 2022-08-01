@@ -1,0 +1,19 @@
+[package]
+name = "tomato"
+version = "0.1.0"
+edition = "2021"
+authors = ["C J Silverio <ceejceej@gmail.com>"]
+description = "🍅 A command-line tool to get and set values in toml files while preserving comments and formatting."
+readme = "README.md"
+license = "BlueOak-1.0.0"
+categories = ["command-line-utilities", "toml"]
+
+[dependencies]
+anyhow = "1.0.58"
+clap = { version = "3.2.16", features = ["derive"] }
+owo-colors = "3.4.0"
+regex = "1.6.0"
+# This does all the work.
+toml_edit = { version = "0.14.4", features = ["serde"] }
+
+# Do I have any dev deps?
