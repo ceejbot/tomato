@@ -1,10 +1,13 @@
 name: "Test the tomato"
 on:
-  workflow_dispatch:
   push:
-    branches:
-      - main
+    branches: [ "latest" ]
   pull_request:
+    branches: [ "latest" ]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
 
 jobs:
   test:
@@ -27,10 +30,5 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
-      - name: Install cargo-nextest
-        uses: actions-rs/install@master
-        with:
-          crate: cargo-nextest
-
       - name: run the tests
-        run: cargo nextest run
+        run: cargo test

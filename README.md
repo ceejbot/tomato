@@ -1,5 +1,7 @@
 # tomato
 
+[![Test the tomato](https://github.com/ceejbot/tomato/actions/workflows/test.yaml/badge.svg)](https://github.com/ceejbot/tomato/actions/workflows/test.yaml)
+
 Get, set, and delete values in TOML files while preserving comments and formatting.
 
 That's it. That's the feature set. `tomato` is intended to be used in shell scripts
