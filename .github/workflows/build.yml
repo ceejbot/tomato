@@ -48,7 +48,6 @@ jobs:
       - run: cargo build --release
 
       - name: upload amd64 linux release
-        id: release
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -63,7 +62,6 @@ jobs:
       - name: build for arm64
         run: cargo build --target aarch64-unknown-linux-gnu --release
       - name: upload arm64 linux release
-        id: release
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -94,7 +92,6 @@ jobs:
             ${{ runner.os }}-cargo-
       - run: cargo build --release
       - name: upload darwin intel release
-        id: intel-release
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -107,7 +104,6 @@ jobs:
       - run: rustup target install aarch64-apple-darwin
       - run: cargo build --target aarch64-apple-darwin --release
       - name: upload darwin m1 release
-        id: m1-release
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
