@@ -1,0 +1,118 @@
+name: Build tomato
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  release:
+    name: release
+    runs-on: ubuntu-latest
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+    steps:
+      - name: create a github release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: tomato ${{ github.ref }}
+          draft: false
+          prerelease: false
+
+  build:
+    name: build for linux
+    runs-on: ubuntu-latest
+    needs: [release]
+    steps:
+      - uses: actions/checkout@v2
+
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+
+      - uses: actions/cache@v2
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - run: cargo build --release
+
+      - name: upload amd64 linux release
+        id: release
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{needs.release.outputs.upload_url}}
+          asset_path: target/release/tomato
+          asset_name: tomato_amd64_linux
+          asset_content_type: application/octet-stream
+
+      - name: install the arm toolchain
+        run: rustup target install aarch64-unknown-linux-gnu
+      - name: build for arm64
+        run: cargo build --target aarch64-unknown-linux-gnu --release
+      - name: upload arm64 linux release
+        id: release
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{needs.release.outputs.upload_url}}
+          asset_path: target/aarch64-unknown-linux-gnu/release/tomato
+          asset_name: tomato_arm64_linux
+          asset_content_type: application/octet-stream
+
+
+  macos:
+    name: macos both flavors
+    runs-on: macos-latest
+    needs: [release]
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+      - uses: actions/cache@v2
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+      - run: cargo build --release
+      - name: upload darwin intel release
+        id: intel-release
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{needs.release.outputs.upload_url}}
+          asset_path: target/release/tomato
+          asset_name: tomato_intel_darwin
+          asset_content_type: application/octet-stream
+
+      - run: rustup target install aarch64-apple-darwin
+      - run: cargo build --target aarch64-apple-darwin --release
+      - name: upload darwin m1 release
+        id: m1-release
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{needs.release.outputs.upload_url}}
+          asset_path: target/aarch64-apple-darwin/release/tomato
+          asset_name: tomato_aarch64_darwin
+          asset_content_type: application/octet-stream

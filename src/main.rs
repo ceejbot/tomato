@@ -1,5 +1,4 @@
 use clap::{Parser, Subcommand};
-use owo_colors::OwoColorize;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
@@ -23,7 +22,7 @@ use toml_edit::{Document, Item, Value};
 struct Args {
     /// The toml file to operate on
     filepath: String,
-    /// How to format the output: json, bash, toml, or raw (no formatting)
+    /// How to format the output: json, bash, toml, or raw (no formatting) (NOT FULLY IMPLEMENTED)
     #[clap(short, long, default_value = "raw")]
     output: OutputMode,
     /// Back up the file to <filepath>.bak if we write a new version.
@@ -41,7 +40,7 @@ enum Command {
         keyspec: Keyspec,
     },
     /// Delete a key from the given file
-    #[clap(aliases = &["del", "delete", "delet", "forget", "regret", "remove", "yank", "yeet"])]
+    #[clap(aliases = &["del", "delete", "delet", "forget", "regret", "remove", "unset", "yank", "yeet"])]
     Rm {
         /// The key to remove from the file. Use dots as path separators.
         keyspec: Keyspec,
@@ -89,7 +88,7 @@ fn parse_file(fpath: &str) -> anyhow::Result<Document, anyhow::Error> {
     buf_reader.read_to_string(&mut data)?;
     let parsed = data
         .parse::<Document>()
-        .unwrap_or_else(|_| panic!("{}", format!("The file {} is not valid toml.", fpath.red())));
+        .unwrap_or_else(|_| panic!("{}", format!("The file {} is not valid toml.", fpath)));
 
     Ok(parsed)
 }
@@ -156,7 +155,7 @@ impl FromStr for Keyspec {
                 }
                 Some(captures) => {
                     if captures.len() != 3 {
-                        anyhow::bail!("{} is not a valid key segment for tomato!", t.red());
+                        anyhow::bail!("{} is not a valid key segment for tomato!", t);
                     } else {
                         subkeys.push(KeySegment::Name(captures[1].to_string()));
                         subkeys.push(KeySegment::Index(captures[2].parse()?))
@@ -190,7 +189,7 @@ fn get_dotted_key(toml: &mut Document, dotted_key: &Keyspec) -> Result<Item, any
     for k in iterator {
         let found = get_in_node(k, node);
         if found.is_none() {
-            anyhow::bail!("key {} not found in toml file", dotted_key.red());
+            anyhow::bail!("key {} not found in toml file", dotted_key);
         }
         node = found.unwrap();
     }
@@ -211,7 +210,7 @@ fn remove_dotted_key(toml: &mut Document, dotted_key: &Keyspec) -> Result<Item, 
     for k in iterator {
         let found = get_in_node(k, node);
         if found.is_none() {
-            anyhow::bail!("key {} not found in toml file", dotted_key.red());
+            anyhow::bail!("key {} not found in toml file", dotted_key);
         }
         node = found.unwrap();
     }
@@ -261,9 +260,43 @@ fn format_toml_item(item: Item, output: OutputMode) -> String {
     match output {
         OutputMode::Raw => format_raw(item),
         OutputMode::Bash => format_raw(item), // TODO
-        OutputMode::Json => format_raw(item), // TODO
+        OutputMode::Json => format_json(item), // TODO
         OutputMode::Toml => item.to_string().trim().to_string(), // the easy case
     }
+}
+
+fn format_json(item: Item) -> String {
+    let res = match item {
+        Item::None => "".to_string(),
+        Item::Value(v) => {
+            match v {
+                Value::String(s) => s.to_string(),
+                Value::Integer(i) => i.to_string(),
+                Value::Float(f) => f.to_string(),
+                Value::Boolean(b) => {
+                    match b.into_value() {
+                        false => "false".to_string(),
+                        true => "true".to_string(),
+                    }
+                }
+                // TODO needs pretty-printing
+                Value::Datetime(dt) => dt.into_value().to_string(),
+                // TODO needs pretty-printing
+                Value::Array(array) => {
+                    // let val = array.to_value();
+                    eprintln!("{:?}", array);
+                    array.to_string()
+                },
+                // TODO needs pretty-printing
+                Value::InlineTable(table) => table.to_string(),
+            }
+        }
+        // TODO needs pretty-printing
+        Item::Table(t) => t.to_string(),
+        // TODO needs pretty-printing
+        Item::ArrayOfTables(aot) => aot.to_string(),
+    };
+    res.trim().to_string()
 }
 
 fn format_raw(item: Item) -> String {
