@@ -22,56 +22,90 @@ The short version:
 The longer version:
 
 ```
-tomato 0.1.0
+🍅 tomato 0.1.0
 C J Silverio <ceejceej@gmail.com>
-🍅 A command-line tool to get and set values in toml files while preserving comments and formatting
+A command-line tool to get and set values in toml files while preserving comments and formatting.
+
+Keys are written using `.` to separate path segments. You can use array[idx] syntax to index into
+arrays if you want to. For example, to get the name of the current crate you're working on, you'd
+run `tomato Cargo.toml get package.name`.
+
+By default tomato emits data a form suitable for immediate use in bash scripts. Strings are
+unquoted, for instance. This concept is not very useful for toml types like tables. If you need to
+consume more complex output, you might select json and pipe to jq.
 
 USAGE:
 	tomato [OPTIONS] <FILEPATH> <SUBCOMMAND>
 
 ARGS:
-	<FILEPATH>    The toml file to operate on
+	<FILEPATH>
+			The toml file to operate on
 
 OPTIONS:
-	-b, --backup     Back up the file to <filepath>.bak if we write a new version
-	-h, --help       Print help information
-	-r, --raw        Raw mode; if set does not quote strings when printing values
-	-V, --version    Print version information
+	-b, --backup
+			Back up the file to <filepath>.bak if we write a new version
+
+	-f, --format <FORMAT>
+			How to format the output: json, toml, or bash (NOT FULLY IMPLEMENTED)
+			[default: bash]
+
+	-h, --help
+			Print help information
+
+	-V, --version
+			Print version information
+
+	-h, --help
+			Print help information
+
+	-V, --version
+			Print version information
 
 SUBCOMMANDS:
 	get     Get the value of a key from the given file
 	help    Print this message or the help of the given subcommand(s)
 	rm      Delete a key from the given file
-	set     Set a key to the given value, returning the previous value if one existed
+	set		Set a key to the given value, returning the previous value if one existed
 ```
 
-
-All error text is printed to stderr. (or will be, anyway)
+`get` and `rm` both print empty string to stdout if the target key is not found. `set`
+exits with a non-zero status with a message printed to stderr if the target key is not found.
 
 ## Examples
 
 Here are some examples run against the Cargo manifest for this project:
 
-```sh
+```shell
 $ tomato Cargo.toml get package.name
-"tomato"
-$ tomato -r Cargo.toml get package.name
 tomato
+$ tomato --format json Cargo.toml get package.name
+"tomato"
 $ tomato Cargo.toml get dependencies.toml_edit.version
 0.14.4
 $ tomato Cargo.toml get package.categories
+( command-line-utilities toml )
+$ tomato --format toml Cargo.toml get package.categories
 ["command-line-utilities", "toml"]
-$ tomato -r Cargo.toml get package.categories[0]
+$ tomato Cargo.toml get package.categories[0]
 command-line-utilities
-$ tomato Cargo.toml get package.categories[1]
+$ tomato --format json Cargo.toml get package.categories[1]
 "toml"
-$ tomato Cargo.toml get dependencies.toml_edit[0]
-value at dependencies.toml_edit is not an array and cannot be indexed into
-$ tomato Cargo.toml del package.categories[1]
+
+# set examples
 $ tomato Cargo.toml set package.name broccoli
 tomato
-$ tomato Cargo.toml set package.categories[0] yaml
+$ tomato Cargo.toml set package.categories[1] yaml
 toml
+
+# Keys that don't exist
+$ tomato Cargo.toml get dependencies.toml_edit[0]
+
+$ tomato Cargo.toml set dependencies.toml_edit[0] "first!"
+Error: unable to index into non-array at dependencies.toml_edit.0
+
+# rm has a number of aliases to prevent user frustration
+$ tomato --format json Cargo.toml del package.categories[0]
+"command-line-utilities"
 ```
 
 ## implementation notes

@@ -20,6 +20,8 @@ toml_edit = { version = "0.14.4", features = ["serde"] }
 fruits = [ "tomato", "plum", "pluot", "kumquat", "persimmon" ]
 numbers = [1, 3, 5, 7, 11, 13, 17, 23]
 when = 2022-08-01T22:04:00-08:00
+are_passing = true
+are_complete = false
 
 # food not algorithms
 [testcases.hashes]
