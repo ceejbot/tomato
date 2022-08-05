@@ -1,5 +1,5 @@
 [package]
-name = "tomato"
+name = "tomato-toml"
 version = "0.1.0"
 edition = "2021"
 authors = ["C J Silverio <ceejceej@gmail.com>"]
@@ -8,6 +8,10 @@ readme = "README.md"
 license = "BlueOak-1.0.0"
 categories = ["command-line-utilities", "toml"]
 keywords = ["cli", "toml", "bash"]
+
+[[bin]]
+name = "tomato"
+path = "src/main.rs"
 
 [dependencies]
 anyhow = "1.0.58"

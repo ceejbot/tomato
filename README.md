@@ -82,8 +82,10 @@ $ tomato --format json Cargo.toml get package.name
 "tomato"
 $ tomato Cargo.toml get dependencies.toml_edit.version
 0.14.4
-$ tomato Cargo.toml get package.categories
+$ tomato --format bash Cargo.toml get package.categories
 ( command-line-utilities toml )
+$ tomato Cargo.toml get package.categories
+( "command-line-utilities" "toml" )
 $ tomato --format toml Cargo.toml get package.categories
 ["command-line-utilities", "toml"]
 $ tomato Cargo.toml get package.categories[0]
@@ -108,15 +110,15 @@ $ tomato --format json Cargo.toml del package.categories[0]
 "command-line-utilities"
 ```
 
-## implementation notes
+## TODO
 
-TODO
+Remaining work:
 
-- all commands work with the easy case; need testing with the array cases
+- all commands work with the easy case; tables are kinda unimplemented
 - need to fill out the tests
 	- datetimes
-	- bools
-- raw output vs quoted (does anybody ever need quoted?)
+	- tables
+	- arrays of tables
 - good error output
 - tty?
 - sweat the help text
