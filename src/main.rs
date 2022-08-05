@@ -1,6 +1,5 @@
 use clap::{Parser, Subcommand};
 use regex::Regex;
-use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use std::fs::File;
 use std::io::prelude::*;
@@ -54,7 +53,7 @@ enum Command {
     },
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug)]
 /// How to format the output of more complex data structures.
 enum Format {
     /// Strings are not quoted; suitable for primitive data types; default
