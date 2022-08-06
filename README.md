@@ -7,14 +7,14 @@ Get, set, and delete values in TOML files while preserving comments and formatti
 That's it. That's the feature set. I wrote `tomato` to satisfy my own primary use
 case, which is to read values of various types from a TOML preferences file,
 process those values in bash tooling, and infrequently update those values from
-different scripts.
+other bash scripts.
 
 An alternative tool would be [dasel](https://daseldocs.tomwright.me), if you
 don't need to preserve comments and formatting when you modify a value. `dasel`
 also supports a large variety of file formats.
 
 If you need to convert among JSON, YAML, and TOML, check out
-[jyt](https://github.com/ken-matsui/jyt), which does just that.
+[jyt](https://github.com/ken-matsui/jyt).
 
 ## Usage
 
@@ -25,13 +25,14 @@ The short version:
 * Delete a key: `tomato <file> rm <dotted.key>`
 
 The `set` and `rm` subcommands modify the input file in place. Thanks to the magic of
-[toml_edit](https://lib.rs/crates/toml_edit), they do so without disturbing whitespace and comments.
+[toml_edit](https://lib.rs/crates/toml_edit), they do so without disturbing whitespace
+and comments.
 
 By default tomato emits data a form suitable for immediate use in bash scripts.
 Strings are unquoted, for instance. The `bash` format generates output suitable
 for `eval` inside bash. Use this for arrays and associative arrays. If you need
 to consume more complex output, you might select `json` format and pipe the
-results to `jq`. And of course if you need toml, use `toml`.
+results to `jq`. And of course if you need TOML, use `toml`.
 The longer version:
 
 ```text
@@ -118,22 +119,22 @@ $ tomato --format json Cargo.toml del package.categories[0]
 "command-line-utilities"
 ```
 
-There are some examples showing consuming array output in bash in the examples directory.
+Look at the `examples/` directory for some sample bash scripts using list and associate array output.
 
 ## TODO
 
 Remaining work:
 
-- decide what to do about bash output
-	- tables: associative arrays with complex values are nonsense to bash
-	- arrays of tables: same
 - complete the tests
 	- datetimes
 	- tables
 	- arrays of tables
-- good error output
-- tty?
-- sweat the help text
+
+## CONTRIBUTING
+
+Heck, yeah! Please keep the major use case in mind: you need to read toml and do stuff
+with it in bash. I'm happy to accept anything that improves that use case or makes the Rust
+parts better.
 
 ## LICENSE
 

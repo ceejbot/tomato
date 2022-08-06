@@ -7,9 +7,9 @@ use std::io::BufReader;
 use std::str::FromStr;
 use toml_edit::{Document, Item, Value};
 
-mod json;
+pub mod json;
 use json::format_json;
-mod bash;
+pub mod bash;
 use bash::format_bash;
 
 #[derive(Parser, Debug)]
@@ -17,7 +17,7 @@ use bash::format_bash;
 /// A command-line tool to get and set values in toml files while preserving comments and
 /// formatting.
 ///
-/// Keys are written using `.` to separate path segments. You can use array[idx] syntax to index
+/// Keys are written using `.` to separate path segments. You can use `array[idx]` syntax to index
 /// into arrays if you want to. For example, to get the name of the current crate you're working on,
 /// you'd run `tomato Cargo.toml get package.name`.
 ///
@@ -88,7 +88,7 @@ impl FromStr for Format {
 
 /// Read the toml file and parse it. Respond with an error that gets propagated up
 /// if the file is not valid toml.
-fn parse_file(fpath: &str) -> anyhow::Result<Document, anyhow::Error> {
+pub fn parse_file(fpath: &str) -> anyhow::Result<Document, anyhow::Error> {
     let file = File::open(fpath)?;
     let mut buf_reader = BufReader::new(file);
     let mut data = String::new();
@@ -322,11 +322,11 @@ pub fn format_raw_value(v: Value) -> String {
             .map(|xs| format_raw_value(xs.clone()))
             .collect::<Vec<String>>()
             .join("\n"),
-        // TODO unimplemented
-        Value::InlineTable(table) => table.to_string(),
+        Value::InlineTable(_) => json::value_to_json(v).to_string(),
     }
 }
 
+/// Parse command-line args and do whatever our user wants!
 fn main() -> anyhow::Result<(), anyhow::Error> {
     let args = Args::parse();
     let mut toml = parse_file(&args.filepath)?;
@@ -342,7 +342,7 @@ fn main() -> anyhow::Result<(), anyhow::Error> {
                 std::fs::copy(&args.filepath, format!("{}.bak", args.filepath))?;
             }
             let mut output = File::create(args.filepath)?;
-            // TODO this won't be great for large files
+            // Note for future work: this won't be great for large files
             write!(output, "{toml}")?;
             println!("{}", format_item(&original, args.format));
         }
@@ -352,7 +352,7 @@ fn main() -> anyhow::Result<(), anyhow::Error> {
                 std::fs::copy(&args.filepath, format!("{}.bak", args.filepath))?;
             }
             let mut output = File::create(args.filepath)?;
-            // TODO this won't be great for large files
+            // Note for future work: this won't be great for large files
             write!(output, "{toml}")?;
             println!("{}", format_item(&original, args.format));
         }

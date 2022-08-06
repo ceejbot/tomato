@@ -1,6 +1,7 @@
 /// Implement serialization into strings that can be eval-ed in bash.
 use toml_edit::{Item, Value};
 
+/// Format a toml_edit::Item and all child items as eval-able bash, if possible.
 pub fn format_bash(item: &Item) -> String {
     // 'ware hackery!
     match item {
@@ -13,11 +14,14 @@ pub fn format_bash(item: &Item) -> String {
             });
             lines.join("\n")
         }
-        // TODO unimplemented
+        // TODO: This bails and emits toml. It might instead emit a lot of
+        // more usable bash, but... tbh in this situation the caller should
+        // snag json and pass it to jq.
         Item::ArrayOfTables(aot) => aot.to_string(),
     }
 }
 
+/// Format a toml_edit::Value as a bash data type, if possible
 fn format_bash_value(v: Value) -> String {
     match v {
         Value::String(s) => s.to_string().trim().to_string(),
@@ -92,17 +96,19 @@ mod tests {
     fn bash_assoc_array() {
         let toml = r#"
 name = "testtable"
-clap = { version = "3.2.16", features = ["derive"] }"#;
+inline_table = { catname = "Kitsune", fruit = "kumquat", "safe_pet" = true, class = "Archaeologist" }"#;
         let expected = r#"declare -A bashval
-bashval[version]="3.2.16"
-bashval[features]=( "derive" )"#;
+bashval[catname]="Kitsune"
+bashval[fruit]="kumquat"
+bashval[safe_pet]=1
+bashval[class]="Archaeologist""#;
 
         let mut doc = toml
             .parse::<Document>()
             .expect("test string should be valid toml");
 
-        let key = Keyspec::from_str("clap").unwrap();
-        let item = get_key(&mut doc, &key).expect("expected to get key 'clap'");
+        let key = Keyspec::from_str("inline_table").unwrap();
+        let item = get_key(&mut doc, &key).expect("expected to get key 'inline_table'");
         let bashified = format_bash(&item);
         assert_eq!(bashified, expected);
     }
