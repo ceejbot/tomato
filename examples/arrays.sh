@@ -1,5 +1,9 @@
 #!/opt/homebrew/bin/bash
 
+# Some examples of arrays in bash. Note the hashbang above!
+# This is to make sure I'm running a modern bash on MacOS for
+# the readarray example.
+
 categories=$(cargo run -- ./fixtures/sample.toml get package.categories)
 for c in $categories; do
 	echo "Marvelous category '$c'!"

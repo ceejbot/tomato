@@ -9,6 +9,8 @@ use toml_edit::{Document, Item, Value};
 
 mod json;
 use json::format_json;
+mod bash;
+use bash::format_bash;
 
 #[derive(Parser, Debug)]
 #[clap(name = "🍅 tomato", version)]
@@ -40,18 +42,18 @@ enum Command {
     /// Get the value of a key from the given file
     Get {
         /// The key to look for. Use dots as path separators.
-        keyspec: Keyspec,
+        key: Keyspec,
     },
     /// Delete a key from the given file
     #[clap(aliases = &["del", "delete", "delet", "forget", "regret", "remove", "unset", "yank", "yeet"])]
     Rm {
         /// The key to remove from the file. Use dots as path separators.
-        keyspec: Keyspec,
+        key: Keyspec,
     },
     /// Set a key to the given value, returning the previous value if one existed.
     Set {
         /// The key to set a value for
-        keyspec: Keyspec,
+        key: Keyspec,
         /// The new value
         value: String,
     },
@@ -184,7 +186,7 @@ fn get_in_node<'a>(key: &'a KeySegment, node: &'a mut Item) -> Option<&'a mut It
     }
 }
 
-fn get_dotted_key(toml: &mut Document, dotted_key: &Keyspec) -> Result<Item, anyhow::Error> {
+fn get_key(toml: &mut Document, dotted_key: &Keyspec) -> Result<Item, anyhow::Error> {
     let mut node: &mut Item = toml.as_item_mut();
     let iterator = dotted_key.subkeys.iter();
 
@@ -199,7 +201,7 @@ fn get_dotted_key(toml: &mut Document, dotted_key: &Keyspec) -> Result<Item, any
     Ok(node.clone())
 }
 
-fn remove_dotted_key(toml: &mut Document, dotted_key: &Keyspec) -> Result<Item, anyhow::Error> {
+fn remove_key(toml: &mut Document, dotted_key: &Keyspec) -> Result<Item, anyhow::Error> {
     let mut node: &mut Item = toml.as_item_mut();
     let mut parent_key: Keyspec = dotted_key.clone();
     let target = parent_key.subkeys.pop();
@@ -229,7 +231,7 @@ fn remove_dotted_key(toml: &mut Document, dotted_key: &Keyspec) -> Result<Item, 
     Ok(Item::None)
 }
 
-fn set_dotted_key(
+fn set_key(
     toml: &mut Document,
     dotted_key: &Keyspec,
     value: &str,
@@ -305,53 +307,17 @@ fn format_raw_value(v: Value) -> String {
     }
 }
 
-fn format_bash(item: Item) -> String {
-    // It's very possible there's an easier way to do this but I haven't
-    // been able to find it yet in the toml_edit api.
-    match item {
-        Item::None => "".to_string(),
-        Item::Value(v) => format_bash_value(v),
-        // TODO unimplemented
-        Item::Table(t) => t.to_string(),
-        // TODO unimplemented
-        Item::ArrayOfTables(aot) => aot.to_string(),
-    }
-}
-
-fn format_bash_value(v: Value) -> String {
-    match v {
-        Value::String(s) => s.to_string().trim().to_string(),
-        Value::Integer(i) => i.into_value().to_string(),
-        Value::Float(f) => f.into_value().to_string(),
-        Value::Boolean(b) => match b.into_value() {
-            true => "1".to_string(),
-            false => "0".to_string(),
-        },
-        Value::Datetime(dt) => dt.into_value().to_string(),
-        Value::Array(array) => {
-            let output = array
-                .iter()
-                .map(|xs| format_bash_value(xs.clone()).trim().to_owned())
-                .collect::<Vec<String>>()
-                .join(" ");
-            format!("( {output} )")
-        }
-        // TODO unimplemented
-        Value::InlineTable(table) => table.to_string(),
-    }
-}
-
 fn main() -> anyhow::Result<(), anyhow::Error> {
     let args = Args::parse();
     let mut toml = parse_file(&args.filepath)?;
 
     match args.cmd {
-        Command::Get { keyspec } => {
-            let item = get_dotted_key(&mut toml, &keyspec)?;
+        Command::Get { key } => {
+            let item = get_key(&mut toml, &key)?;
             println!("{}", format_item(item, args.format));
         }
-        Command::Rm { keyspec } => {
-            let original = remove_dotted_key(&mut toml, &keyspec)?;
+        Command::Rm { key } => {
+            let original = remove_key(&mut toml, &key)?;
             if args.backup {
                 std::fs::copy(&args.filepath, format!("{}.bak", args.filepath))?;
             }
@@ -360,8 +326,8 @@ fn main() -> anyhow::Result<(), anyhow::Error> {
             write!(output, "{toml}")?;
             println!("{}", format_item(original, args.format));
         }
-        Command::Set { keyspec, value } => {
-            let original = set_dotted_key(&mut toml, &keyspec, &value)?;
+        Command::Set { key, value } => {
+            let original = set_key(&mut toml, &key, &value)?;
             if args.backup {
                 std::fs::copy(&args.filepath, format!("{}.bak", args.filepath))?;
             }
@@ -437,12 +403,12 @@ mod tests {
             .expect("test doc should be valid toml");
 
         let key = Keyspec::from_str("testcases.hashes.color").unwrap();
-        let item = get_dotted_key(&mut doc, &key).expect("expected to get key 'hashes.color'");
+        let item = get_key(&mut doc, &key).expect("expected to get key 'hashes.color'");
         assert_eq!("brown", format_item(item.clone(), Format::Raw));
         assert_eq!("\"brown\"", format_item(item, Format::Toml));
 
         let key = Keyspec::from_str("testcases.hashes.mats[1]").unwrap();
-        let item = get_dotted_key(&mut doc, &key).expect("expected this key to be valid");
+        let item = get_key(&mut doc, &key).expect("expected this key to be valid");
         assert_eq!("salt", format_item(item, Format::Raw));
     }
 
@@ -455,13 +421,13 @@ mod tests {
 
         let key = Keyspec::from_str("testcases.hashes.color").expect("test key should be valid");
         let item =
-            set_dotted_key(&mut doc, &key, "taupe").expect("expected to find key 'hashes.color'");
+            set_key(&mut doc, &key, "taupe").expect("expected to find key 'hashes.color'");
         assert_eq!("brown", format_item(item, Format::Raw));
         assert!(doc.to_string().contains("color = \"taupe\""));
 
         let key =
             Keyspec::from_str("testcases.hashes.mats[3]").expect("expected this key to be valid");
-        let item = set_dotted_key(&mut doc, &key, "bacon").expect("could not find this key");
+        let item = set_key(&mut doc, &key, "bacon").expect("could not find this key");
         assert_eq!("frying", format_item(item, Format::Raw));
         assert!(doc.to_string().contains("bacon"));
     }
@@ -474,12 +440,12 @@ mod tests {
             .expect("test doc should be valid toml");
 
         let key = Keyspec::from_str("testcases.hashes.color").unwrap();
-        let item = remove_dotted_key(&mut doc, &key).expect("expected to find key 'hashes.color'");
+        let item = remove_key(&mut doc, &key).expect("expected to find key 'hashes.color'");
         assert_eq!("brown", format_item(item, Format::Raw));
         assert!(!doc.to_string().contains("color = \"brown\""));
 
         let key = Keyspec::from_str("testcases.hashes.mats[1]").unwrap();
-        let item = remove_dotted_key(&mut doc, &key)
+        let item = remove_key(&mut doc, &key)
             .expect("expected to find key testcases.hashes.mats[1]");
         assert_eq!("salt", format_item(item, Format::Raw));
         assert!(doc
@@ -496,29 +462,29 @@ mod tests {
 
         let key = Keyspec::from_str("testcases.hashes.mats").unwrap();
         let item =
-            get_dotted_key(&mut doc, &key).expect("expected to find key testcases.hashes.mats");
+            get_key(&mut doc, &key).expect("expected to find key testcases.hashes.mats");
         let formatted = format_bash(item);
         assert_eq!(formatted, r#"( "potatoes" "salt" "oil" "frying" )"#);
 
         let key = Keyspec::from_str("testcases.numbers").unwrap();
-        let item = get_dotted_key(&mut doc, &key).expect("expected to find key testcases.numbers");
+        let item = get_key(&mut doc, &key).expect("expected to find key testcases.numbers");
         let formatted = format_bash(item);
         assert_eq!(formatted, r#"( 1 3 5 7 11 13 17 23 )"#);
 
         let key = Keyspec::from_str("testcases.hashes.color").unwrap();
-        let item = get_dotted_key(&mut doc, &key).expect("expected to find key testcases.numbers");
+        let item = get_key(&mut doc, &key).expect("expected to find key testcases.numbers");
         let formatted = format_bash(item);
         assert_eq!(formatted, r#""brown""#);
 
         let key = Keyspec::from_str("testcases.are_passing").unwrap();
         let item =
-            get_dotted_key(&mut doc, &key).expect("expected to find key testcases.are_passing");
+            get_key(&mut doc, &key).expect("expected to find key testcases.are_passing");
         let formatted = format_bash(item);
         assert_eq!(formatted, r#"1"#);
 
         let key = Keyspec::from_str("testcases.are_complete").unwrap();
         let item =
-            get_dotted_key(&mut doc, &key).expect("expected to find key testcases.are_complete");
+            get_key(&mut doc, &key).expect("expected to find key testcases.are_complete");
         let formatted = format_bash(item);
         assert_eq!(formatted, r#"0"#);
     }
@@ -532,40 +498,41 @@ mod tests {
 
         let key = Keyspec::from_str("testcases.hashes.mats").unwrap();
         let item =
-            get_dotted_key(&mut doc, &key).expect("expected to find key testcases.hashes.mats");
+            get_key(&mut doc, &key).expect("expected to find key testcases.hashes.mats");
         let formatted = format_json(item);
         assert_eq!(formatted, r#"["potatoes","salt","oil","frying"]"#);
 
         let key = Keyspec::from_str("testcases.numbers").unwrap();
-        let item = get_dotted_key(&mut doc, &key).expect("expected to find key testcases.numbers");
+        let item = get_key(&mut doc, &key).expect("expected to find key testcases.numbers");
         let formatted = format_json(item);
         assert_eq!(formatted, r#"[1,3,5,7,11,13,17,23]"#);
 
         let key = Keyspec::from_str("testcases.hashes.color").unwrap();
-        let item = get_dotted_key(&mut doc, &key).expect("expected to find key testcases.numbers");
+        let item = get_key(&mut doc, &key).expect("expected to find key testcases.numbers");
         let formatted = format_json(item);
         assert_eq!(formatted, r#""brown""#);
 
         let key = Keyspec::from_str("testcases.are_passing").unwrap();
         let item =
-            get_dotted_key(&mut doc, &key).expect("expected to find key testcases.are_passing");
+            get_key(&mut doc, &key).expect("expected to find key testcases.are_passing");
         let formatted = format_json(item);
         assert_eq!(formatted, r#"true"#);
 
         let key = Keyspec::from_str("testcases.are_complete").unwrap();
         let item =
-            get_dotted_key(&mut doc, &key).expect("expected to find key testcases.are_complete");
+            get_key(&mut doc, &key).expect("expected to find key testcases.are_complete");
         let formatted = format_json(item);
         assert_eq!(formatted, r#"false"#);
 
         let key = Keyspec::from_str("nested").unwrap();
         let item =
-            get_dotted_key(&mut doc, &key).expect("expected to find key nested");
+            get_key(&mut doc, &key).expect("expected to find key nested");
         let formatted = format_json(item);
         assert_eq!(formatted, r#"[{"entry":"one"},{"entry":"two"}]"#);
 
         let item = doc.as_item();
         let json = format_json(item.clone());
+        println!("{json}");
         assert_eq!(json, include_str!("../fixtures/sample.json").trim());
     }
 
@@ -578,29 +545,29 @@ mod tests {
 
         let key = Keyspec::from_str("testcases.hashes.mats").unwrap();
         let item =
-            get_dotted_key(&mut doc, &key).expect("expected to find key testcases.hashes.mats");
+            get_key(&mut doc, &key).expect("expected to find key testcases.hashes.mats");
         let formatted = format_toml(item);
         assert_eq!(formatted, r#"[ "potatoes", "salt", "oil", "frying" ]"#);
 
         let key = Keyspec::from_str("testcases.numbers").unwrap();
-        let item = get_dotted_key(&mut doc, &key).expect("expected to find key testcases.numbers");
+        let item = get_key(&mut doc, &key).expect("expected to find key testcases.numbers");
         let formatted = format_toml(item);
         assert_eq!(formatted, r#"[1, 3, 5, 7, 11, 13, 17, 23]"#);
 
         let key = Keyspec::from_str("testcases.hashes.color").unwrap();
-        let item = get_dotted_key(&mut doc, &key).expect("expected to find key testcases.numbers");
+        let item = get_key(&mut doc, &key).expect("expected to find key testcases.numbers");
         let formatted = format_toml(item);
         assert_eq!(formatted, r#""brown""#);
 
         let key = Keyspec::from_str("testcases.are_passing").unwrap();
         let item =
-            get_dotted_key(&mut doc, &key).expect("expected to find key testcases.are_passing");
+            get_key(&mut doc, &key).expect("expected to find key testcases.are_passing");
         let formatted = format_toml(item);
         assert_eq!(formatted, r#"true"#);
 
         let key = Keyspec::from_str("testcases.are_complete").unwrap();
         let item =
-            get_dotted_key(&mut doc, &key).expect("expected to find key testcases.are_complete");
+            get_key(&mut doc, &key).expect("expected to find key testcases.are_complete");
         let formatted = format_toml(item);
         assert_eq!(formatted, r#"false"#);
     }

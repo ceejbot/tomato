@@ -36,14 +36,15 @@ The longer version:
 
 ```
 🍅 tomato 0.1.0
-C J Silverio <ceejceej@gmail.com>
 A command-line tool to get and set values in toml files while preserving comments and formatting.
 
 Keys are written using `.` to separate path segments. You can use array[idx] syntax to index into
 arrays if you want to. For example, to get the name of the current crate you're working on, you'd
 run `tomato Cargo.toml get package.name`.
 
-By default tomato emits data in a form suitable for immediate use in bash scripts.
+By default tomato emits data in a form suitable for immediate use in bash scripts if they are
+primitive values: strings are unquoted, for instance. If you want to use more complex data types,
+consider one of the other output formats. (Json output is not fully implemented yet!)
 
 USAGE:
 	tomato [OPTIONS] <FILEPATH> <SUBCOMMAND>
@@ -57,14 +58,8 @@ OPTIONS:
 			Back up the file to <filepath>.bak if we write a new version
 
 	-f, --format <FORMAT>
-			How to format the output: json, toml, or bash
-			[default: bash]
-
-	-h, --help
-			Print help information
-
-	-V, --version
-			Print version information
+			How to format the output: json, toml, bash, or raw
+			[default: raw]
 
 	-h, --help
 			Print help information
@@ -76,7 +71,7 @@ SUBCOMMANDS:
 	get     Get the value of a key from the given file
 	help    Print this message or the help of the given subcommand(s)
 	rm      Delete a key from the given file
-	set		Set a key to the given value, returning the previous value if one existed
+	set     Set a key to the given value, returning the previous value if one existed
 ```
 
 `get` and `rm` both print empty string to stdout if the target key is not found. `set`
@@ -131,7 +126,7 @@ Remaining work:
 - fill out bash output:
 	- tables
 	- arrays of tables
-- complete the tgests
+- complete the tests
 	- datetimes
 	- tables
 	- arrays of tables

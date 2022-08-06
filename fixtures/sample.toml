@@ -23,6 +23,7 @@ when = 2022-08-01T22:04:00-08:00
 are_passing = true
 are_complete = false
 phrases = [ "interim censeo yaml delenda est", "she is a menace to Rome", "also significant whitespace makes me sad" ]
+inline_table = { catname = "Kitsune", fruit = "kumquat", "safe_pet" = true, class = "Archaeologist" }
 
 # food not algorithms
 [testcases.hashes]
