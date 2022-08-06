@@ -34,6 +34,8 @@ jobs:
         run: |
           curl -sL https://get.nexte.st/latest/linux -o nextest.tgz
           tar xfz nextest.tgz
+          echo "$PATH"
+          mv cargo-nextest /home/runner/.cargo/bin
 
       - name: run the tests
         run: ./cargo-nextest run
