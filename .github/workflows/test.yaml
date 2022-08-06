@@ -30,5 +30,10 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
+      - name: get cargo-nextest on path
+        run: |
+          curl -sL https://get.nexte.st/latest/linux -o nextest.tgz
+          tar xfz nextest.tgz
+
       - name: run the tests
-        run: cargo test
+        run: ./cargo-nextest run

@@ -4,6 +4,9 @@ on:
     tags:
       - 'v*'
 
+env:
+      CARGO_TERM_COLOR: always
+
 jobs:
   release:
     name: release
