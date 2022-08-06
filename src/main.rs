@@ -14,17 +14,17 @@ use bash::format_bash;
 
 #[derive(Parser, Debug)]
 #[clap(name = "🍅 tomato", version)]
-/// A command-line tool to get and set values in toml files while preserving comments and formatting.
+/// A command-line tool to get and set values in toml files while preserving comments and
+/// formatting.
 ///
-/// Keys are written using `.` to separate path segments. You can use array[idx] syntax to index into
-/// arrays if you want to. For example, to get the name of the current crate you're working on, you'd
-/// run `tomato Cargo.toml get package.name`.
+/// Keys are written using `.` to separate path segments. You can use array[idx] syntax to index
+/// into arrays if you want to. For example, to get the name of the current crate you're working on,
+/// you'd run `tomato Cargo.toml get package.name`.
 ///
 /// By default tomato emits data in a form suitable for immediate use in bash scripts if they are
-/// primitive values: strings are unquoted, for instance. If you want to use more complex data types,
-/// consider one of the other output formats.
-/// (Json output is not fully implemented yet!)
-struct Args {
+/// primitive values: strings are unquoted, for instance. If you want to use more complex data
+/// types, consider one of the other output formats.
+pub struct Args {
     /// The toml file to operate on
     filepath: String,
     /// How to format the output: json, toml, bash, or raw (NOT FULLY IMPLEMENTED)
@@ -38,7 +38,7 @@ struct Args {
 }
 
 #[derive(Clone, Debug, Subcommand)]
-enum Command {
+pub enum Command {
     /// Get the value of a key from the given file
     Get {
         /// The key to look for. Use dots as path separators.
@@ -61,7 +61,7 @@ enum Command {
 
 #[derive(Clone, Debug)]
 /// How to format the output of more complex data structures.
-enum Format {
+pub enum Format {
     /// Strings are not quoted; suitable for primitive data types; default
     Raw,
     /// Suitable for dropping into bash for eval
@@ -86,6 +86,8 @@ impl FromStr for Format {
     }
 }
 
+/// Read the toml file and parse it. Respond with an error that gets propagated up
+/// if the file is not valid toml.
 fn parse_file(fpath: &str) -> anyhow::Result<Document, anyhow::Error> {
     let file = File::open(fpath)?;
     let mut buf_reader = BufReader::new(file);
@@ -99,7 +101,8 @@ fn parse_file(fpath: &str) -> anyhow::Result<Document, anyhow::Error> {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-enum KeySegment {
+/// Keys can contain either name segments or array indexes.
+pub enum KeySegment {
     Name(String),
     Index(usize),
 }
@@ -118,7 +121,8 @@ impl Display for KeySegment {
 }
 
 #[derive(Debug, Clone)]
-struct Keyspec {
+/// An internal representation of the dotted key string given on the command-line.
+pub struct Keyspec {
     subkeys: Vec<KeySegment>,
 }
 
@@ -173,7 +177,9 @@ impl FromStr for Keyspec {
     }
 }
 
-fn get_in_node<'a>(key: &'a KeySegment, node: &'a mut Item) -> Option<&'a mut Item> {
+/// Given a key segment, find that key in this node. Returns None if the key segment is an
+/// int but the node is not an array.
+pub fn get_in_node<'a>(key: &'a KeySegment, node: &'a mut Item) -> Option<&'a mut Item> {
     match key {
         KeySegment::Name(n) => node.get_mut(n),
         KeySegment::Index(idx) => {
@@ -186,7 +192,9 @@ fn get_in_node<'a>(key: &'a KeySegment, node: &'a mut Item) -> Option<&'a mut It
     }
 }
 
-fn get_key(toml: &mut Document, dotted_key: &Keyspec) -> Result<Item, anyhow::Error> {
+/// Given a full dotted-form key from the command-line, find the matching value
+/// in the given document. Responds with Item::None if not found.
+pub fn get_key(toml: &mut Document, dotted_key: &Keyspec) -> Result<Item, anyhow::Error> {
     let mut node: &mut Item = toml.as_item_mut();
     let iterator = dotted_key.subkeys.iter();
 
@@ -201,7 +209,10 @@ fn get_key(toml: &mut Document, dotted_key: &Keyspec) -> Result<Item, anyhow::Er
     Ok(node.clone())
 }
 
-fn remove_key(toml: &mut Document, dotted_key: &Keyspec) -> Result<Item, anyhow::Error> {
+/// Remove the node corresponding to the given key. If the key was not found, we
+/// return an error saying so. Otherwise, we respond with the value that the key
+/// used to point to.
+pub fn remove_key(toml: &mut Document, dotted_key: &Keyspec) -> Result<Item, anyhow::Error> {
     let mut node: &mut Item = toml.as_item_mut();
     let mut parent_key: Keyspec = dotted_key.clone();
     let target = parent_key.subkeys.pop();
@@ -231,7 +242,11 @@ fn remove_key(toml: &mut Document, dotted_key: &Keyspec) -> Result<Item, anyhow:
     Ok(Item::None)
 }
 
-fn set_key(
+/// Set the given key to the new value, and respond with the original value.
+/// Will replace null nodes if the parent was found, adding a new key to the
+/// document. Will repond with an error if the key included an index into an
+/// array for a non-array node in the document.
+pub fn set_key(
     toml: &mut Document,
     dotted_key: &Keyspec,
     value: &str,
@@ -263,7 +278,8 @@ fn set_key(
     Ok(original)
 }
 
-fn format_item(item: Item, output: Format) -> String {
+/// Format the given toml_edit item for the desired kind of output.
+pub fn format_item(item: &Item, output: Format) -> String {
     match output {
         Format::Raw => format_raw(item),
         Format::Bash => format_bash(item),
@@ -272,22 +288,26 @@ fn format_item(item: Item, output: Format) -> String {
     }
 }
 
-fn format_toml(item: Item) -> String {
+/// Format the item as toml.
+pub fn format_toml(item: &Item) -> String {
     item.to_string().trim().to_string()
 }
 
-fn format_raw(item: Item) -> String {
+/// Format the item as a primitive type ready to use in bash. Falls back to
+/// json format for complex items, which might not be what you want.
+pub fn format_raw(item: &Item) -> String {
     match item {
         Item::None => "".to_string(),
-        Item::Value(v) => format_raw_value(v),
-        // TODO unimplemented
-        Item::Table(t) => t.to_string(),
-        // TODO unimplemented
-        Item::ArrayOfTables(aot) => aot.to_string(),
+        Item::Value(v) => format_raw_value(v.clone()),
+        Item::Table(_) => format_json(item),
+        Item::ArrayOfTables(_) => format_json(item),
     }
 }
 
-fn format_raw_value(v: Value) -> String {
+/// Format the value in a way useful immediately in bash scripts. This option
+/// falls back to json for anything that doesn't make sense in that context,
+/// such as toml tables.
+pub fn format_raw_value(v: Value) -> String {
     match v {
         Value::String(s) => s.into_value(),
         Value::Integer(i) => i.into_value().to_string(),
@@ -314,7 +334,7 @@ fn main() -> anyhow::Result<(), anyhow::Error> {
     match args.cmd {
         Command::Get { key } => {
             let item = get_key(&mut toml, &key)?;
-            println!("{}", format_item(item, args.format));
+            println!("{}", format_item(&item, args.format));
         }
         Command::Rm { key } => {
             let original = remove_key(&mut toml, &key)?;
@@ -324,7 +344,7 @@ fn main() -> anyhow::Result<(), anyhow::Error> {
             let mut output = File::create(args.filepath)?;
             // TODO this won't be great for large files
             write!(output, "{toml}")?;
-            println!("{}", format_item(original, args.format));
+            println!("{}", format_item(&original, args.format));
         }
         Command::Set { key, value } => {
             let original = set_key(&mut toml, &key, &value)?;
@@ -334,7 +354,7 @@ fn main() -> anyhow::Result<(), anyhow::Error> {
             let mut output = File::create(args.filepath)?;
             // TODO this won't be great for large files
             write!(output, "{toml}")?;
-            println!("{}", format_item(original, args.format));
+            println!("{}", format_item(&original, args.format));
         }
     };
 
@@ -404,12 +424,12 @@ mod tests {
 
         let key = Keyspec::from_str("testcases.hashes.color").unwrap();
         let item = get_key(&mut doc, &key).expect("expected to get key 'hashes.color'");
-        assert_eq!("brown", format_item(item.clone(), Format::Raw));
-        assert_eq!("\"brown\"", format_item(item, Format::Toml));
+        assert_eq!("brown", format_item(&item, Format::Raw));
+        assert_eq!("\"brown\"", format_item(&item, Format::Toml));
 
         let key = Keyspec::from_str("testcases.hashes.mats[1]").unwrap();
         let item = get_key(&mut doc, &key).expect("expected this key to be valid");
-        assert_eq!("salt", format_item(item, Format::Raw));
+        assert_eq!("salt", format_item(&item, Format::Raw));
     }
 
     #[test]
@@ -422,13 +442,13 @@ mod tests {
         let key = Keyspec::from_str("testcases.hashes.color").expect("test key should be valid");
         let item =
             set_key(&mut doc, &key, "taupe").expect("expected to find key 'hashes.color'");
-        assert_eq!("brown", format_item(item, Format::Raw));
+        assert_eq!("brown", format_item(&item, Format::Raw));
         assert!(doc.to_string().contains("color = \"taupe\""));
 
         let key =
             Keyspec::from_str("testcases.hashes.mats[3]").expect("expected this key to be valid");
         let item = set_key(&mut doc, &key, "bacon").expect("could not find this key");
-        assert_eq!("frying", format_item(item, Format::Raw));
+        assert_eq!("frying", format_item(&item, Format::Raw));
         assert!(doc.to_string().contains("bacon"));
     }
 
@@ -441,99 +461,16 @@ mod tests {
 
         let key = Keyspec::from_str("testcases.hashes.color").unwrap();
         let item = remove_key(&mut doc, &key).expect("expected to find key 'hashes.color'");
-        assert_eq!("brown", format_item(item, Format::Raw));
+        assert_eq!("brown", format_item(&item, Format::Raw));
         assert!(!doc.to_string().contains("color = \"brown\""));
 
         let key = Keyspec::from_str("testcases.hashes.mats[1]").unwrap();
         let item = remove_key(&mut doc, &key)
             .expect("expected to find key testcases.hashes.mats[1]");
-        assert_eq!("salt", format_item(item, Format::Raw));
+        assert_eq!("salt", format_item(&item, Format::Raw));
         assert!(doc
             .to_string()
             .contains(r#"mats = [ "potatoes", "oil", "frying" ]"#));
-    }
-
-    #[test]
-    fn bash_ouput() {
-        let toml = include_str!("../fixtures/sample.toml");
-        let mut doc = toml
-            .parse::<Document>()
-            .expect("test doc should be valid toml");
-
-        let key = Keyspec::from_str("testcases.hashes.mats").unwrap();
-        let item =
-            get_key(&mut doc, &key).expect("expected to find key testcases.hashes.mats");
-        let formatted = format_bash(item);
-        assert_eq!(formatted, r#"( "potatoes" "salt" "oil" "frying" )"#);
-
-        let key = Keyspec::from_str("testcases.numbers").unwrap();
-        let item = get_key(&mut doc, &key).expect("expected to find key testcases.numbers");
-        let formatted = format_bash(item);
-        assert_eq!(formatted, r#"( 1 3 5 7 11 13 17 23 )"#);
-
-        let key = Keyspec::from_str("testcases.hashes.color").unwrap();
-        let item = get_key(&mut doc, &key).expect("expected to find key testcases.numbers");
-        let formatted = format_bash(item);
-        assert_eq!(formatted, r#""brown""#);
-
-        let key = Keyspec::from_str("testcases.are_passing").unwrap();
-        let item =
-            get_key(&mut doc, &key).expect("expected to find key testcases.are_passing");
-        let formatted = format_bash(item);
-        assert_eq!(formatted, r#"1"#);
-
-        let key = Keyspec::from_str("testcases.are_complete").unwrap();
-        let item =
-            get_key(&mut doc, &key).expect("expected to find key testcases.are_complete");
-        let formatted = format_bash(item);
-        assert_eq!(formatted, r#"0"#);
-    }
-
-    #[test]
-    fn json_output() {
-        let toml = include_str!("../fixtures/sample.toml");
-        let mut doc = toml
-            .parse::<Document>()
-            .expect("test doc should be valid toml");
-
-        let key = Keyspec::from_str("testcases.hashes.mats").unwrap();
-        let item =
-            get_key(&mut doc, &key).expect("expected to find key testcases.hashes.mats");
-        let formatted = format_json(item);
-        assert_eq!(formatted, r#"["potatoes","salt","oil","frying"]"#);
-
-        let key = Keyspec::from_str("testcases.numbers").unwrap();
-        let item = get_key(&mut doc, &key).expect("expected to find key testcases.numbers");
-        let formatted = format_json(item);
-        assert_eq!(formatted, r#"[1,3,5,7,11,13,17,23]"#);
-
-        let key = Keyspec::from_str("testcases.hashes.color").unwrap();
-        let item = get_key(&mut doc, &key).expect("expected to find key testcases.numbers");
-        let formatted = format_json(item);
-        assert_eq!(formatted, r#""brown""#);
-
-        let key = Keyspec::from_str("testcases.are_passing").unwrap();
-        let item =
-            get_key(&mut doc, &key).expect("expected to find key testcases.are_passing");
-        let formatted = format_json(item);
-        assert_eq!(formatted, r#"true"#);
-
-        let key = Keyspec::from_str("testcases.are_complete").unwrap();
-        let item =
-            get_key(&mut doc, &key).expect("expected to find key testcases.are_complete");
-        let formatted = format_json(item);
-        assert_eq!(formatted, r#"false"#);
-
-        let key = Keyspec::from_str("nested").unwrap();
-        let item =
-            get_key(&mut doc, &key).expect("expected to find key nested");
-        let formatted = format_json(item);
-        assert_eq!(formatted, r#"[{"entry":"one"},{"entry":"two"}]"#);
-
-        let item = doc.as_item();
-        let json = format_json(item.clone());
-        println!("{json}");
-        assert_eq!(json, include_str!("../fixtures/sample.json").trim());
     }
 
     #[test]
@@ -546,29 +483,29 @@ mod tests {
         let key = Keyspec::from_str("testcases.hashes.mats").unwrap();
         let item =
             get_key(&mut doc, &key).expect("expected to find key testcases.hashes.mats");
-        let formatted = format_toml(item);
+        let formatted = format_toml(&item);
         assert_eq!(formatted, r#"[ "potatoes", "salt", "oil", "frying" ]"#);
 
         let key = Keyspec::from_str("testcases.numbers").unwrap();
         let item = get_key(&mut doc, &key).expect("expected to find key testcases.numbers");
-        let formatted = format_toml(item);
+        let formatted = format_toml(&item);
         assert_eq!(formatted, r#"[1, 3, 5, 7, 11, 13, 17, 23]"#);
 
         let key = Keyspec::from_str("testcases.hashes.color").unwrap();
         let item = get_key(&mut doc, &key).expect("expected to find key testcases.numbers");
-        let formatted = format_toml(item);
+        let formatted = format_toml(&item);
         assert_eq!(formatted, r#""brown""#);
 
         let key = Keyspec::from_str("testcases.are_passing").unwrap();
         let item =
             get_key(&mut doc, &key).expect("expected to find key testcases.are_passing");
-        let formatted = format_toml(item);
+        let formatted = format_toml(&item);
         assert_eq!(formatted, r#"true"#);
 
         let key = Keyspec::from_str("testcases.are_complete").unwrap();
         let item =
             get_key(&mut doc, &key).expect("expected to find key testcases.are_complete");
-        let formatted = format_toml(item);
+        let formatted = format_toml(&item);
         assert_eq!(formatted, r#"false"#);
     }
 }
