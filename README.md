@@ -1,6 +1,6 @@
 # tomato
 
-[![Test the tomato](https://github.com/ceejbot/tomato/actions/workflows/test.yaml/badge.svg)](https://github.com/ceejbot/tomato/actions/workflows/test.yaml)
+[![Test the tomato](https://github.com/ceejbot/tomato/actions/workflows/test.yaml/badge.svg)](https://github.com/ceejbot/tomato/actions/workflows/test.yaml) ![Crates.io](https://img.shields.io/crates/v/tomato-toml)
 
 Get, set, and delete values in TOML files while preserving comments and formatting.
 
