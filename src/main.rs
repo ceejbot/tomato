@@ -44,7 +44,7 @@ pub enum Command {
         /// The key to look for. Use dots as path separators.
         key: Keyspec,
     },
-    /// Delete a key from the given file
+    /// Delete a key from the given file, returning the previous value if one existed
     #[clap(aliases = &["del", "delete", "delet", "forget", "regret", "remove", "unset", "yank", "yeet"])]
     Rm {
         /// The key to remove from the file. Use dots as path separators.

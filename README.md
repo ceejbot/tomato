@@ -9,6 +9,15 @@ case, which is to read values of various types from a TOML preferences file,
 process those values in bash tooling, and infrequently update those values from
 other bash scripts.
 
+To use:
+
+```shell
+cargo install tomato-toml
+tomato --help
+```
+
+Or snag a pre-built executable from [the releases](https://github.com/ceejbot/tomato/releases/latest).
+
 An alternative tool would be [dasel](https://daseldocs.tomwright.me), if you
 don't need to preserve comments and formatting when you modify a value. `dasel`
 also supports a large variety of file formats.
@@ -22,7 +31,7 @@ The short version:
 
 * Get a key: `tomato <file> get <dotted.key>`
 * Set a key: `tomato <file> set <dotted.key> <value>`
-* Delete a key: `tomato <file> rm <dotted.key>`
+* Delete a key: `tomato <file> rm <dotted.key>` (with lots of aliases for `rm`)
 
 The `set` and `rm` subcommands modify the input file in place. Thanks to the magic of
 [toml_edit](https://lib.rs/crates/toml_edit), they do so without disturbing whitespace
@@ -73,7 +82,7 @@ OPTIONS:
 SUBCOMMANDS:
 	get     Get the value of a key from the given file
 	help    Print this message or the help of the given subcommand(s)
-	rm      Delete a key from the given file
+	rm      Delete a key from the given file, returning the previous value if one existed
 	set     Set a key to the given value, returning the previous value if one existed
 ```
 
