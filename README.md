@@ -4,12 +4,17 @@
 
 Get, set, and delete values in TOML files while preserving comments and formatting.
 
-That's it. That's the feature set. `tomato` is intended to be used in shell scripts
-that need to read toml values and occasionally set them.
+That's it. That's the feature set. I wrote `tomato` to satisfy my own primary use
+case, which is to read values of various types from a TOML preferences file,
+process those values in bash tooling, and infrequently update those values from
+different scripts.
 
-An alternative tool would be [dasel](https://daseldocs.tomwright.me), if you don't
-need to preserve comments and formatting when you modify a value. Dasel also
-supports a large variety of file formats.
+An alternative tool would be [dasel](https://daseldocs.tomwright.me), if you
+don't need to preserve comments and formatting when you modify a value. `dasel`
+also supports a large variety of file formats.
+
+If you need to convert among JSON, YAML, and TOML, check out
+[jyt](https://github.com/ken-matsui/jyt), which does just that.
 
 ## Usage
 
@@ -19,6 +24,14 @@ The short version:
 * Set a key: `tomato <file> set <dotted.key> <value>`
 * Delete a key: `tomato <file> rm <dotted.key>`
 
+The `set` and `rm` subcommands modify the input file in place. Thanks to the magic of
+[toml_edit](https://lib.rs/crates/toml_edit), they do so without disturbing whitespace and comments.
+
+By default tomato emits data a form suitable for immediate use in bash scripts.
+Strings are unquoted, for instance. The `bash` format generates output suitable
+for `eval` inside bash. Use this for arrays and associative arrays. If you need
+to consume more complex output, you might select `json` format and pipe the
+results to `jq`. And of course if you need toml, use `toml`.
 The longer version:
 
 ```
@@ -30,9 +43,7 @@ Keys are written using `.` to separate path segments. You can use array[idx] syn
 arrays if you want to. For example, to get the name of the current crate you're working on, you'd
 run `tomato Cargo.toml get package.name`.
 
-By default tomato emits data a form suitable for immediate use in bash scripts. Strings are
-unquoted, for instance. This concept is not very useful for toml types like tables. If you need to
-consume more complex output, you might select json and pipe to jq.
+By default tomato emits data in a form suitable for immediate use in bash scripts.
 
 USAGE:
 	tomato [OPTIONS] <FILEPATH> <SUBCOMMAND>
@@ -46,7 +57,7 @@ OPTIONS:
 			Back up the file to <filepath>.bak if we write a new version
 
 	-f, --format <FORMAT>
-			How to format the output: json, toml, or bash (NOT FULLY IMPLEMENTED)
+			How to format the output: json, toml, or bash
 			[default: bash]
 
 	-h, --help
@@ -110,12 +121,17 @@ $ tomato --format json Cargo.toml del package.categories[0]
 "command-line-utilities"
 ```
 
+There are some examples showing consuming array output in bash in `examples/simple.sh`.
+
 ## TODO
 
 Remaining work:
 
-- all commands work with the easy case; tables are kinda unimplemented
-- need to fill out the tests
+- all commands work with the easy cases
+- fill out bash output:
+	- tables
+	- arrays of tables
+- complete the tgests
 	- datetimes
 	- tables
 	- arrays of tables

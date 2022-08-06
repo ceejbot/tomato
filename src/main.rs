@@ -7,6 +7,9 @@ use std::io::BufReader;
 use std::str::FromStr;
 use toml_edit::{Document, Item, Value};
 
+mod json;
+use json::format_json;
+
 #[derive(Parser, Debug)]
 #[clap(name = "🍅 tomato", version)]
 /// A command-line tool to get and set values in toml files while preserving comments and formatting.
@@ -15,14 +18,14 @@ use toml_edit::{Document, Item, Value};
 /// arrays if you want to. For example, to get the name of the current crate you're working on, you'd
 /// run `tomato Cargo.toml get package.name`.
 ///
-/// By default tomato emits data in a form suitable for immediate use in bash scripts. Strings are
-/// unquoted, for instance. This concept is not very useful for toml types like tables.
-/// If you need to consume more complex output, you might select json and pipe to jq.
+/// By default tomato emits data in a form suitable for immediate use in bash scripts if they are
+/// primitive values: strings are unquoted, for instance. If you want to use more complex data types,
+/// consider one of the other output formats.
 /// (Json output is not fully implemented yet!)
 struct Args {
     /// The toml file to operate on
     filepath: String,
-    /// How to format the output: json, toml, or bash (NOT FULLY IMPLEMENTED)
+    /// How to format the output: json, toml, bash, or raw (NOT FULLY IMPLEMENTED)
     #[clap(short, long, default_value = "raw")]
     format: Format,
     /// Back up the file to <filepath>.bak if we write a new version.
@@ -271,38 +274,6 @@ fn format_toml(item: Item) -> String {
     item.to_string().trim().to_string()
 }
 
-fn format_json(item: Item) -> String {
-    let res = match item {
-        Item::None => "".to_string(),
-        Item::Value(v) => {
-            match v {
-                Value::String(s) => s.to_string(),
-                Value::Integer(i) => i.to_string(),
-                Value::Float(f) => f.to_string(),
-                Value::Boolean(b) => match b.into_value() {
-                    false => "false".to_string(),
-                    true => "true".to_string(),
-                },
-                // TODO needs pretty-printing
-                Value::Datetime(dt) => dt.into_value().to_string(),
-                // TODO needs pretty-printing
-                Value::Array(array) => {
-                    // let val = array.to_value();
-                    eprintln!("{:?}", array);
-                    array.to_string()
-                }
-                // TODO needs pretty-printing
-                Value::InlineTable(table) => table.to_string(),
-            }
-        }
-        // TODO needs pretty-printing
-        Item::Table(t) => t.to_string(),
-        // TODO needs pretty-printing
-        Item::ArrayOfTables(aot) => aot.to_string(),
-    };
-    res.trim().to_string()
-}
-
 fn format_raw(item: Item) -> String {
     match item {
         Item::None => "".to_string(),
@@ -324,15 +295,11 @@ fn format_raw_value(v: Value) -> String {
             false => "0".to_string(),
         },
         Value::Datetime(dt) => dt.into_value().to_string(),
-        Value::Array(array) => {
-            array
-                .iter()
-                .map(|xs| {
-                    format_raw_value(xs.clone()).to_string()
-                })
-                .collect::<Vec<String>>()
-                .join("\n")
-        }
+        Value::Array(array) => array
+            .iter()
+            .map(|xs| format_raw_value(xs.clone()))
+            .collect::<Vec<String>>()
+            .join("\n"),
         // TODO unimplemented
         Value::InlineTable(table) => table.to_string(),
     }
@@ -567,12 +534,12 @@ mod tests {
         let item =
             get_dotted_key(&mut doc, &key).expect("expected to find key testcases.hashes.mats");
         let formatted = format_json(item);
-        assert_eq!(formatted, r#"[ "potatoes", "salt", "oil", "frying" ]"#);
+        assert_eq!(formatted, r#"["potatoes","salt","oil","frying"]"#);
 
         let key = Keyspec::from_str("testcases.numbers").unwrap();
         let item = get_dotted_key(&mut doc, &key).expect("expected to find key testcases.numbers");
         let formatted = format_json(item);
-        assert_eq!(formatted, r#"[1, 3, 5, 7, 11, 13, 17, 23]"#);
+        assert_eq!(formatted, r#"[1,3,5,7,11,13,17,23]"#);
 
         let key = Keyspec::from_str("testcases.hashes.color").unwrap();
         let item = get_dotted_key(&mut doc, &key).expect("expected to find key testcases.numbers");
@@ -590,6 +557,16 @@ mod tests {
             get_dotted_key(&mut doc, &key).expect("expected to find key testcases.are_complete");
         let formatted = format_json(item);
         assert_eq!(formatted, r#"false"#);
+
+        let key = Keyspec::from_str("nested").unwrap();
+        let item =
+            get_dotted_key(&mut doc, &key).expect("expected to find key nested");
+        let formatted = format_json(item);
+        assert_eq!(formatted, r#"[{"entry":"one"},{"entry":"two"}]"#);
+
+        let item = doc.as_item();
+        let json = format_json(item.clone());
+        assert_eq!(json, include_str!("../fixtures/sample.json").trim());
     }
 
     #[test]
