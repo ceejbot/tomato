@@ -34,7 +34,7 @@ to consume more complex output, you might select `json` format and pipe the
 results to `jq`. And of course if you need toml, use `toml`.
 The longer version:
 
-```
+```text
 🍅 tomato 0.1.0
 A command-line tool to get and set values in toml files while preserving
 comments and formatting.
@@ -118,16 +118,15 @@ $ tomato --format json Cargo.toml del package.categories[0]
 "command-line-utilities"
 ```
 
-There are some examples showing consuming array output in bash in `examples/simple.sh`.
+There are some examples showing consuming array output in bash in the examples directory.
 
 ## TODO
 
 Remaining work:
 
-- all commands work with the easy cases
-- fill out bash output:
-	- tables
-	- arrays of tables
+- decide what to do about bash output
+	- tables: associative arrays with complex values are nonsense to bash
+	- arrays of tables: same
 - complete the tests
 	- datetimes
 	- tables

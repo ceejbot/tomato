@@ -440,8 +440,7 @@ mod tests {
             .expect("test doc should be valid toml");
 
         let key = Keyspec::from_str("testcases.hashes.color").expect("test key should be valid");
-        let item =
-            set_key(&mut doc, &key, "taupe").expect("expected to find key 'hashes.color'");
+        let item = set_key(&mut doc, &key, "taupe").expect("expected to find key 'hashes.color'");
         assert_eq!("brown", format_item(&item, Format::Raw));
         assert!(doc.to_string().contains("color = \"taupe\""));
 
@@ -465,8 +464,8 @@ mod tests {
         assert!(!doc.to_string().contains("color = \"brown\""));
 
         let key = Keyspec::from_str("testcases.hashes.mats[1]").unwrap();
-        let item = remove_key(&mut doc, &key)
-            .expect("expected to find key testcases.hashes.mats[1]");
+        let item =
+            remove_key(&mut doc, &key).expect("expected to find key testcases.hashes.mats[1]");
         assert_eq!("salt", format_item(&item, Format::Raw));
         assert!(doc
             .to_string()
@@ -481,8 +480,7 @@ mod tests {
             .expect("test doc should be valid toml");
 
         let key = Keyspec::from_str("testcases.hashes.mats").unwrap();
-        let item =
-            get_key(&mut doc, &key).expect("expected to find key testcases.hashes.mats");
+        let item = get_key(&mut doc, &key).expect("expected to find key testcases.hashes.mats");
         let formatted = format_toml(&item);
         assert_eq!(formatted, r#"[ "potatoes", "salt", "oil", "frying" ]"#);
 
@@ -497,14 +495,12 @@ mod tests {
         assert_eq!(formatted, r#""brown""#);
 
         let key = Keyspec::from_str("testcases.are_passing").unwrap();
-        let item =
-            get_key(&mut doc, &key).expect("expected to find key testcases.are_passing");
+        let item = get_key(&mut doc, &key).expect("expected to find key testcases.are_passing");
         let formatted = format_toml(&item);
         assert_eq!(formatted, r#"true"#);
 
         let key = Keyspec::from_str("testcases.are_complete").unwrap();
-        let item =
-            get_key(&mut doc, &key).expect("expected to find key testcases.are_complete");
+        let item = get_key(&mut doc, &key).expect("expected to find key testcases.are_complete");
         let formatted = format_toml(&item);
         assert_eq!(formatted, r#"false"#);
     }
