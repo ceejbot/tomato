@@ -22,7 +22,7 @@ jobs:
         with:
           tag_name: ${{ github.ref }}
           release_name: tomato ${{ github.ref }}
-          draft: false
+          draft: true
           prerelease: false
 
   build:
