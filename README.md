@@ -9,10 +9,17 @@ case, which is to read values of various types from a TOML preferences file,
 process those values in bash tooling, and infrequently update those values from
 other bash scripts.
 
-To use:
+To install:
 
 ```shell
+# using homebrew:
+brew tap ceejbot/tap
+brew install
+
+# if you have rust installed:
 cargo install tomato-toml
+
+# once installed:
 tomato --help
 ```
 
@@ -29,9 +36,9 @@ If you need to convert among JSON, YAML, and TOML, check out
 
 The short version:
 
-* Get a key: `tomato <file> get <dotted.key>`
-* Set a key: `tomato <file> set <dotted.key> <value>`
-* Delete a key: `tomato <file> rm <dotted.key>` (with lots of aliases for `rm`)
+* Get a key: `tomato get <file> <dotted.key>`
+* Set a key: `tomato set <file> <dotted.key> <value>`
+* Delete a key: `tomato rm <file> <dotted.key>` (with lots of aliases for `rm`)
 
 The `set` and `rm` subcommands modify the input file in place. Thanks to the magic of
 [toml_edit](https://lib.rs/crates/toml_edit), they do so without disturbing whitespace
@@ -42,28 +49,23 @@ Strings are unquoted, for instance. The `bash` format generates output suitable
 for `eval` inside bash. Use this for arrays and associative arrays. If you need
 to consume more complex output, you might select `json` format and pipe the
 results to `jq`. And of course if you need TOML, use `toml`.
+
 The longer version:
 
 ```text
-🍅 tomato 0.1.0
-A command-line tool to get and set values in toml files while preserving
-comments and formatting.
+🍅 tomato 0.2.0
+A command-line tool to get and set values in toml files while preserving comments and formatting.
 
-Keys are written using `.` to separate path segments. You can use array[idx]
-syntax to index into arrays if you want to. For example, to get the name of the
-current crate you're working on, you'd run `tomato Cargo.toml get package.name`.
+Keys are written using `.` to separate path segments. You can use `array[idx]` syntax to index into
+arrays if you want to. For example, to get the name of the current crate you're working on, you'd
+run `tomato get Cargo.toml package.name`.
 
-
-By default tomato emits data in a form suitable for immediate use in bash
-scripts if they are primitive values: strings are unquoted, for instance. If you
-want to use more complex data types, consider one of the other output formats.
+By default tomato emits data in a form suitable for immediate use in bash scripts if they are
+primitive values: strings are unquoted, for instance. If you want to use more complex data types,
+consider one of the other output formats.
 
 USAGE:
-	tomato [OPTIONS] <FILEPATH> <SUBCOMMAND>
-
-ARGS:
-	<FILEPATH>
-			The toml file to operate on
+	tomato [OPTIONS] <SUBCOMMAND>
 
 OPTIONS:
 	-b, --backup
@@ -81,9 +83,11 @@ OPTIONS:
 
 SUBCOMMANDS:
 	get     Get the value of a key from the given file
-	help    Print this message or the help of the given subcommand(s)
-	rm      Delete a key from the given file, returning the previous value if one existed
 	set     Set a key to the given value, returning the previous value if one existed
+	rm      Delete a key from the given file, returning the previous value if one existed
+	completions
+			Generate completions for the named shell
+	help    Print this message or the help of the given subcommand(s)
 ```
 
 `get` and `rm` both print empty string to stdout if the target key is not found. `set`
@@ -94,37 +98,37 @@ exits with a non-zero status with a message printed to stderr if the target key 
 Here are some examples run against the Cargo manifest for this project:
 
 ```shell
-$ tomato Cargo.toml get package.name
+$ tomato get Cargo.toml package.name
 tomato
-$ tomato --format json Cargo.toml get package.name
+$ tomato --format json get Cargo.toml package.name
 "tomato"
-$ tomato Cargo.toml get dependencies.toml_edit.version
+$ tomato get Cargo.toml dependencies.toml_edit.version
 0.14.4
-$ tomato --format bash Cargo.toml get package.categories
+$ tomato --format bash get Cargo.toml package.categories
 ( command-line-utilities toml )
-$ tomato Cargo.toml get package.categories
+$ tomato get Cargo.toml package.categories
 ( "command-line-utilities" "toml" )
-$ tomato --format toml Cargo.toml get package.categories
+$ tomato --format toml get Cargo.toml package.categories
 ["command-line-utilities", "toml"]
-$ tomato Cargo.toml get package.categories[0]
+$ tomato get Cargo.toml package.categories[0]
 command-line-utilities
-$ tomato --format json Cargo.toml get package.categories[1]
+$ tomato --format json get Cargo.toml package.categories[1]
 "toml"
 
 # set examples
-$ tomato Cargo.toml set package.name broccoli
+$ tomato set Cargo.toml package.name broccoli
 tomato
-$ tomato Cargo.toml set package.categories[1] yaml
+$ tomato set Cargo.toml package.categories[1] yaml
 toml
 
 # Keys that don't exist
-$ tomato Cargo.toml get dependencies.toml_edit[0]
+$ tomato get Cargo.toml dependencies.toml_edit[0]
 
-$ tomato Cargo.toml set dependencies.toml_edit[0] "first!"
+$ tomato set Cargo.toml dependencies.toml_edit[0] "first!"
 Error: unable to index into non-array at dependencies.toml_edit.0
 
 # rm has a number of aliases to prevent user frustration
-$ tomato --format json Cargo.toml del package.categories[0]
+$ tomato --format json del Cargo.toml package.categories[0]
 "command-line-utilities"
 ```
 

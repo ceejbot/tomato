@@ -1,4 +1,5 @@
 use clap::{Parser, Subcommand};
+use clap_complete::{generate, Shell};
 use regex::Regex;
 use std::fmt::Display;
 use std::fs::File;
@@ -25,9 +26,7 @@ use bash::format_bash;
 /// primitive values: strings are unquoted, for instance. If you want to use more complex data
 /// types, consider one of the other output formats.
 pub struct Args {
-    /// The toml file to operate on
-    filepath: String,
-    /// How to format the output: json, toml, bash, or raw (NOT FULLY IMPLEMENTED)
+    /// How to format the output: json, toml, bash, or raw
     #[clap(short, long, default_value = "raw")]
     format: Format,
     /// Back up the file to <filepath>.bak if we write a new version.
@@ -40,22 +39,36 @@ pub struct Args {
 #[derive(Clone, Debug, Subcommand)]
 pub enum Command {
     /// Get the value of a key from the given file
+    #[clap(display_order = 1)]
     Get {
+        /// The toml file to operate on
+        filepath: String,
         /// The key to look for. Use dots as path separators.
         key: Keyspec,
     },
     /// Delete a key from the given file, returning the previous value if one existed
-    #[clap(aliases = &["del", "delete", "delet", "forget", "regret", "remove", "unset", "yank", "yeet"])]
+    #[clap(aliases = &["del", "delete", "delet", "forget", "regret", "remove", "unset", "yank", "yeet"], display_order=3)]
     Rm {
+        /// The toml file to operate on
+        filepath: String,
         /// The key to remove from the file. Use dots as path separators.
         key: Keyspec,
     },
     /// Set a key to the given value, returning the previous value if one existed.
+    #[clap(display_order = 2)]
     Set {
+        /// The toml file to operate on
+        filepath: String,
         /// The key to set a value for
         key: Keyspec,
         /// The new value
         value: String,
+    },
+    /// Generate completions for the named shell
+    #[clap(display_order = 4)]
+    Completions {
+        #[clap(arg_enum)]
+        shell: Shell,
     },
 }
 
@@ -84,6 +97,14 @@ impl FromStr for Format {
             _ => Err(anyhow::anyhow!("{input} is not a supported output type")),
         }
     }
+}
+
+#[derive(clap::ArgEnum, PartialEq, Debug, Clone)]
+enum ShellChoice {
+    Bash,
+    Fish,
+    Powershell,
+    Zsh,
 }
 
 /// Read the toml file and parse it. Respond with an error that gets propagated up
@@ -329,32 +350,43 @@ pub fn format_raw_value(v: Value) -> String {
 /// Parse command-line args and do whatever our user wants!
 fn main() -> anyhow::Result<(), anyhow::Error> {
     let args = Args::parse();
-    let mut toml = parse_file(&args.filepath)?;
 
     match args.cmd {
-        Command::Get { key } => {
+        Command::Get { filepath, key } => {
+            let mut toml = parse_file(&filepath)?;
             let item = get_key(&mut toml, &key)?;
             println!("{}", format_item(&item, args.format));
         }
-        Command::Rm { key } => {
+        Command::Rm { filepath, key } => {
+            let mut toml = parse_file(&filepath)?;
             let original = remove_key(&mut toml, &key)?;
             if args.backup {
-                std::fs::copy(&args.filepath, format!("{}.bak", args.filepath))?;
+                std::fs::copy(&filepath, format!("{}.bak", filepath))?;
             }
-            let mut output = File::create(args.filepath)?;
+            let mut output = File::create(filepath)?;
             // Note for future work: this won't be great for large files
             write!(output, "{toml}")?;
             println!("{}", format_item(&original, args.format));
         }
-        Command::Set { key, value } => {
+        Command::Set {
+            filepath,
+            key,
+            value,
+        } => {
+            let mut toml = parse_file(&filepath)?;
             let original = set_key(&mut toml, &key, &value)?;
             if args.backup {
-                std::fs::copy(&args.filepath, format!("{}.bak", args.filepath))?;
+                std::fs::copy(&filepath, format!("{}.bak", filepath))?;
             }
-            let mut output = File::create(args.filepath)?;
+            let mut output = File::create(filepath)?;
             // Note for future work: this won't be great for large files
             write!(output, "{toml}")?;
             println!("{}", format_item(&original, args.format));
+        }
+        Command::Completions { shell } => {
+            use clap::CommandFactory;
+            let mut app = Args::command();
+            generate(shell, &mut app, "tomato", &mut std::io::stdout())
         }
     };
 
