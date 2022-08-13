@@ -50,13 +50,13 @@ jobs:
       - run: cargo build --release
 
       - name: write out completions
-        run:
+        run: |
           ./target/release/tomato completions bash > completions.bash
           ./target/release/tomato completions zsh > completions.zsh
           ./target/release/tomato completions fish > completions.fish
 
       - name: tar it up
-        run:
+        run: |
           tar cf tomato_amd64_linux.tar -C target/release tomato
           tar f tomato_amd64_linux.tar -r completions.bash completions.zsh completions.fish
           gzip tomato_amd64_linux.tar
@@ -79,7 +79,7 @@ jobs:
           args: --release --target aarch64-unknown-linux-gnu
 
       - name: tar it up
-        run:
+        run: |
           tar cf tomato_arm64_linux.tar -C target/release tomato
           tar f tomato_arm64_linux.tar -r completions.bash completions.zsh completions.fish
           gzip tomato_arm64_linux.tar
@@ -117,13 +117,13 @@ jobs:
       - run: cargo build --release
 
       - name: write out completions
-        run:
+        run: |
           ./target/release/tomato completions bash > completions.bash
           ./target/release/tomato completions zsh > completions.zsh
           ./target/release/tomato completions fish > completions.fish
 
       - name: tar up the Mac Intel release
-        run:
+        run: |
           tar cf tomato_intel_darwin.tar -C target/release tomato
           tar f tomato_intel_darwin.tar -r completions.bash completions.zsh completions.fish
           gzip tomato_intel_darwin.tar
@@ -142,7 +142,7 @@ jobs:
       - run: cargo build --target aarch64-apple-darwin --release
 
       - name: tar up the aarch64 release
-        run:
+        run: |
           tar cf tomato_aarch64_darwin.tar -C target/release tomato
           tar f tomato_aarch64_darwin.tar -r completions.bash completions.zsh completions.fish
           gzip tomato_aarch64_darwin.tar

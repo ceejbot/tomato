@@ -1,7 +1,13 @@
-name: "Test the tomato"
+name: "Tests"
 on:
   push:
     branches: [ "latest" ]
+    paths:
+      - src/**
+      - fixtures/**
+      - Cargo.toml
+      - Cargo.lock
+      - .github/workflows/test.yaml
   pull_request:
     branches: [ "latest" ]
   workflow_dispatch:
