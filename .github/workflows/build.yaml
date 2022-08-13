@@ -94,7 +94,6 @@ jobs:
           asset_name: tomato_arm64_linux.tar.gz
           asset_content_type: application/octet-stream
 
-
   macos:
     name: macos both flavors
     runs-on: macos-latest

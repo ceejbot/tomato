@@ -22,6 +22,11 @@ use bash::format_bash;
 /// into arrays if you want to. For example, to get the name of the current crate you're working on,
 /// you'd run `tomato Cargo.toml get package.name`.
 ///
+/// To read from stdin instead of a file, pass '-' as the filename. Operating on stdin changes
+/// the behavior of set and rm somewhat, under the assumption that you are using this tool in
+/// a shell script. If you read from stdin, normal output (the old value) is suppressed. Instead
+/// the modified file is written to stdout in json if you requested json, toml otherwise.
+///
 /// By default tomato emits data in a form suitable for immediate use in bash scripts if they are
 /// primitive values: strings are unquoted, for instance. If you want to use more complex data
 /// types, consider one of the other output formats.
@@ -41,7 +46,7 @@ pub enum Command {
     /// Get the value of a key from the given file
     #[clap(display_order = 1)]
     Get {
-        /// The toml file to operate on
+        /// The toml file to operate on. Pass '-' to read from stdin.
         filepath: String,
         /// The key to look for. Use dots as path separators.
         key: Keyspec,
@@ -49,7 +54,9 @@ pub enum Command {
     /// Delete a key from the given file, returning the previous value if one existed
     #[clap(aliases = &["del", "delete", "delet", "forget", "regret", "remove", "unset", "yank", "yeet"], display_order=3)]
     Rm {
-        /// The toml file to operate on
+        /// The toml file to operate on. Pass '-' to read from stdin. If you read from stdin,
+        /// the normal output of the old value is suppressed. Instead the modified file is written
+        /// to stdout in json if you requested json, toml otherwise.
         filepath: String,
         /// The key to remove from the file. Use dots as path separators.
         key: Keyspec,
@@ -57,14 +64,16 @@ pub enum Command {
     /// Set a key to the given value, returning the previous value if one existed.
     #[clap(display_order = 2)]
     Set {
-        /// The toml file to operate on
+        /// The toml file to operate on. Pass '-' to read from stdin. If you read from stdin,
+        /// the normal output of the old value is suppressed. Instead the modified file is written
+        /// to stdout in json if you requested json, toml otherwise.
         filepath: String,
-        /// The key to set a value for
+        /// The key to set a value for. Use dots as path separators.
         key: Keyspec,
-        /// The new value
+        /// The new value.
         value: String,
     },
-    /// Generate completions for the named shell
+    /// Generate completions for the named shell.
     #[clap(display_order = 4)]
     Completions {
         #[clap(arg_enum)]
@@ -77,7 +86,7 @@ pub enum Command {
 pub enum Format {
     /// Strings are not quoted; suitable for primitive data types; default
     Raw,
-    /// Suitable for dropping into bash for eval
+    /// Suitable for dropping into bash for eval; might not be suitable for complex structures
     Bash,
     /// Output valid JSON
     Json,
@@ -110,10 +119,18 @@ enum ShellChoice {
 /// Read the toml file and parse it. Respond with an error that gets propagated up
 /// if the file is not valid toml.
 pub fn parse_file(fpath: &str) -> anyhow::Result<Document, anyhow::Error> {
-    let file = File::open(fpath)?;
-    let mut buf_reader = BufReader::new(file);
     let mut data = String::new();
-    buf_reader.read_to_string(&mut data)?;
+    match fpath {
+        "-" => {
+            let mut reader = BufReader::new(std::io::stdin());
+            reader.read_to_string(&mut data)?;
+        }
+        _ => {
+            let file = File::open(fpath)?;
+            let mut reader = BufReader::new(file);
+            reader.read_to_string(&mut data)?;
+        }
+    };
     let parsed = data
         .parse::<Document>()
         .unwrap_or_else(|_| panic!("{}", format!("The file {} is not valid toml.", fpath)));
@@ -121,7 +138,17 @@ pub fn parse_file(fpath: &str) -> anyhow::Result<Document, anyhow::Error> {
     Ok(parsed)
 }
 
-#[derive(Clone, Debug, PartialEq)]
+pub fn write_file(toml: &Document, fpath: &str, backup: bool) -> anyhow::Result<(), anyhow::Error> {
+    if backup {
+        std::fs::copy(fpath, format!("{}.bak", fpath))?;
+    }
+    let mut output = File::create(fpath)?;
+    // Note for future work: this won't be great for large files
+    write!(output, "{toml}")?;
+    Ok(())
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 /// Keys can contain either name segments or array indexes.
 pub enum KeySegment {
     Name(String),
@@ -264,8 +291,8 @@ pub fn remove_key(toml: &mut Document, dotted_key: &Keyspec) -> Result<Item, any
 }
 
 /// Set the given key to the new value, and respond with the original value.
-/// Will replace null nodes if the parent was found, adding a new key to the
-/// document. Will repond with an error if the key included an index into an
+/// Replaces null nodes if the parent was found, adding a new key to the
+/// document. Reponds with an error if the key included an index into an
 /// array for a non-array node in the document.
 pub fn set_key(
     toml: &mut Document,
@@ -360,13 +387,18 @@ fn main() -> anyhow::Result<(), anyhow::Error> {
         Command::Rm { filepath, key } => {
             let mut toml = parse_file(&filepath)?;
             let original = remove_key(&mut toml, &key)?;
-            if args.backup {
-                std::fs::copy(&filepath, format!("{}.bak", filepath))?;
+            match filepath.as_str() {
+                "-" => {
+                    match args.format {
+                        Format::Json => println!("{}", format_item(toml.as_item(), args.format)),
+                        _ => println!("{toml}"),
+                    };
+                }
+                _ => {
+                    write_file(&toml, &filepath, args.backup)?;
+                    println!("{}", format_item(&original, args.format));
+                }
             }
-            let mut output = File::create(filepath)?;
-            // Note for future work: this won't be great for large files
-            write!(output, "{toml}")?;
-            println!("{}", format_item(&original, args.format));
         }
         Command::Set {
             filepath,
@@ -375,13 +407,18 @@ fn main() -> anyhow::Result<(), anyhow::Error> {
         } => {
             let mut toml = parse_file(&filepath)?;
             let original = set_key(&mut toml, &key, &value)?;
-            if args.backup {
-                std::fs::copy(&filepath, format!("{}.bak", filepath))?;
+            match filepath.as_str() {
+                "-" => {
+                    match args.format {
+                        Format::Json => println!("{}", format_item(toml.as_item(), args.format)),
+                        _ => println!("{toml}"),
+                    };
+                }
+                _ => {
+                    write_file(&toml, &filepath, args.backup)?;
+                    println!("{}", format_item(&original, args.format));
+                }
             }
-            let mut output = File::create(filepath)?;
-            // Note for future work: this won't be great for large files
-            write!(output, "{toml}")?;
-            println!("{}", format_item(&original, args.format));
         }
         Command::Completions { shell } => {
             use clap::CommandFactory;

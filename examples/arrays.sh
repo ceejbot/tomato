@@ -4,7 +4,9 @@
 # This is to make sure I'm running a modern bash on MacOS for
 # the readarray example.
 
-categories=$(cargo run --quiet -- get ./fixtures/sample.toml package.categories)
+cargo build --quiet
+
+categories=$(target/debug/tomato get ./fixtures/sample.toml package.categories)
 for c in $categories; do
 	echo "Marvelous category '$c'!"
 done
@@ -12,7 +14,7 @@ done
 # If you have a modern bash:
 echo ''
 echo "modern bash:"
-readarray -t phrases < <(cargo run --quiet -- get ./fixtures/sample.toml testcases.phrases)
+readarray -t phrases < <(target/debug/tomato get ./fixtures/sample.toml testcases.phrases)
 for i in "${phrases[@]}"; do
 	echo "readarray: $i"
 done
@@ -27,7 +29,7 @@ done
 
 echo ''
 echo "let's use some eval!"
-evaluation=$(cargo run --quiet -- --format bash get ./fixtures/sample.toml testcases.phrases)
+evaluation=$(target/debug/tomato --format bash get ./fixtures/sample.toml testcases.phrases)
 eval "result=$evaluation"
 for i in "${result[@]}"; do
 	echo "eval: $i"

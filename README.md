@@ -16,7 +16,7 @@ To install:
 brew tap ceejbot/tap
 brew install
 
-# if you have rust installed:
+# if you have rust installed and prefer to build from source:
 cargo install tomato-toml
 
 # once installed:
@@ -58,7 +58,12 @@ A command-line tool to get and set values in toml files while preserving comment
 
 Keys are written using `.` to separate path segments. You can use `array[idx]` syntax to index into
 arrays if you want to. For example, to get the name of the current crate you're working on, you'd
-run `tomato get Cargo.toml package.name`.
+run `tomato Cargo.toml get package.name`.
+
+To read from stdin instead of a file, pass '-' as the filename. Operating on stdin changes the
+behavior of set and rm somewhat, under the assumption that you are using this tool in a shell script.
+If you read from stdin, normal output (the old value) is suppressed. Instead the modified file is
+written to stdout in json if you requested json, toml otherwise.
 
 By default tomato emits data in a form suitable for immediate use in bash scripts if they are
 primitive values: strings are unquoted, for instance. If you want to use more complex data types,
@@ -73,6 +78,7 @@ OPTIONS:
 
 	-f, --format <FORMAT>
 			How to format the output: json, toml, bash, or raw
+
 			[default: raw]
 
 	-h, --help
@@ -102,23 +108,13 @@ $ tomato get Cargo.toml package.name
 tomato
 $ tomato --format json get Cargo.toml package.name
 "tomato"
-$ tomato get Cargo.toml dependencies.toml_edit.version
-0.14.4
-$ tomato --format bash get Cargo.toml package.categories
-( command-line-utilities toml )
-$ tomato get Cargo.toml package.categories
-( "command-line-utilities" "toml" )
-$ tomato --format toml get Cargo.toml package.categories
-["command-line-utilities", "toml"]
-$ tomato get Cargo.toml package.categories[0]
-command-line-utilities
-$ tomato --format json get Cargo.toml package.categories[1]
-"toml"
+$ cat Cargo.toml | tomato get - package.name
+tomato
 
 # set examples
 $ tomato set Cargo.toml package.name broccoli
 tomato
-$ tomato set Cargo.toml package.categories[1] yaml
+$ tomato set Cargo.toml package.keywords[1] yaml
 toml
 
 # Keys that don't exist
@@ -132,7 +128,8 @@ $ tomato --format json del Cargo.toml package.categories[0]
 "command-line-utilities"
 ```
 
-Look at the `examples/` directory for some sample bash scripts using list and associate array output.
+Look at the `examples/` directory for some sample bash scripts with more varied examples,
+including examples of using lists and associative arrays in bash.
 
 ## TODO
 
