@@ -1,6 +1,6 @@
 [package]
 name = "tomato-toml"
-version = "0.2.0-test1"
+version = "0.2.0-test2"
 edition = "2021"
 authors = ["C J Silverio <ceejceej@gmail.com>"]
 description = "🍅 A command-line tool to get and set values in toml files while preserving comments and formatting."
