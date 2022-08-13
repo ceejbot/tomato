@@ -1,6 +1,7 @@
 # tomato
 
-[![Test the tomato](https://github.com/ceejbot/tomato/actions/workflows/test.yaml/badge.svg)](https://github.com/ceejbot/tomato/actions/workflows/test.yaml) ![Crates.io](https://img.shields.io/crates/v/tomato-toml)
+[![Test the tomato](https://github.com/ceejbot/tomato/actions/workflows/test.yaml/badge.svg)](https://github.com/ceejbot/tomato/actions/workflows/test.yaml)
+![Crates.io](https://img.shields.io/crates/v/tomato-toml)
 
 Get, set, and delete values in TOML files while preserving comments and formatting.
 
@@ -60,25 +61,26 @@ Keys are written using `.` to separate path segments. You can use `array[idx]` s
 arrays if you want to. For example, to get the name of the current crate you're working on, you'd
 run `tomato Cargo.toml get package.name`.
 
-To read from stdin instead of a file, pass '-' as the filename. Operating on stdin changes the
-behavior of set and rm somewhat, under the assumption that you are using this tool in a shell script.
-If you read from stdin, normal output (the old value) is suppressed. Instead the modified file is
-written to stdout in json if you requested json, toml otherwise.
-
 By default tomato emits data in a form suitable for immediate use in bash scripts if they are
 primitive values: strings are unquoted, for instance. If you want to use more complex data types,
 consider one of the other output formats.
+
+To read from stdin instead of a file, pass '-' as the filename. Operating on stdin changes the
+behavior of set and rm somewhat, under the assumption that you are using this tool in a shell
+script. If you read from stdin, normal output (the old value) is suppressed. Instead the modified
+file is written to stdout in json if you requested json, toml otherwise. The 'bash' format option is
+ignored.
 
 USAGE:
 	tomato [OPTIONS] <SUBCOMMAND>
 
 OPTIONS:
 	-b, --backup
-			Back up the file to <filepath>.bak if we write a new version
+			Back up the file to <filepath>.bak if we write a new version. This option is ignored
+			when we're operating on stdin
 
 	-f, --format <FORMAT>
 			How to format the output: json, toml, bash, or raw
-
 			[default: raw]
 
 	-h, --help

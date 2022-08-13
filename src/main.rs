@@ -22,19 +22,21 @@ use keys::*;
 /// into arrays if you want to. For example, to get the name of the current crate you're working on,
 /// you'd run `tomato Cargo.toml get package.name`.
 ///
+/// By default tomato emits data in a form suitable for immediate use in bash scripts if they are
+/// primitive values: strings are unquoted, for instance. If you want to use more complex data
+/// types, consider one of the other output formats.
+///
 /// To read from stdin instead of a file, pass '-' as the filename. Operating on stdin changes
 /// the behavior of set and rm somewhat, under the assumption that you are using this tool in
 /// a shell script. If you read from stdin, normal output (the old value) is suppressed. Instead
 /// the modified file is written to stdout in json if you requested json, toml otherwise.
-///
-/// By default tomato emits data in a form suitable for immediate use in bash scripts if they are
-/// primitive values: strings are unquoted, for instance. If you want to use more complex data
-/// types, consider one of the other output formats.
+/// The 'bash' format option is ignored.
 pub struct Args {
     /// How to format the output: json, toml, bash, or raw
     #[clap(short, long, default_value = "raw")]
     format: Format,
-    /// Back up the file to <filepath>.bak if we write a new version.
+    /// Back up the file to <filepath>.bak if we write a new version. This option is ignored
+    /// when we're operating on stdin.
     #[clap(long, short)]
     backup: bool,
     #[clap(subcommand)]
@@ -46,25 +48,15 @@ pub enum Command {
     /// Get the value of a key from the given file
     #[clap(display_order = 1)]
     Get {
-        /// The toml file to operate on. Pass '-' to read from stdin.
+        /// The toml file to read from. Pass '-' to read from stdin.
         filepath: String,
         /// The key to look for. Use dots as path separators.
-        key: Keyspec,
-    },
-    /// Delete a key from the given file, returning the previous value if one existed
-    #[clap(aliases = &["del", "delete", "delet", "forget", "regret", "remove", "unset", "yank", "yeet"], display_order=3)]
-    Rm {
-        /// The toml file to operate on. Pass '-' to read from stdin. If you read from stdin,
-        /// the normal output of the old value is suppressed. Instead the modified file is written
-        /// to stdout in json if you requested json, toml otherwise.
-        filepath: String,
-        /// The key to remove from the file. Use dots as path separators.
         key: Keyspec,
     },
     /// Set a key to the given value, returning the previous value if one existed.
     #[clap(display_order = 2)]
     Set {
-        /// The toml file to operate on. Pass '-' to read from stdin. If you read from stdin,
+        /// The toml file to read from. Pass '-' to read from stdin. If you read from stdin,
         /// the normal output of the old value is suppressed. Instead the modified file is written
         /// to stdout in json if you requested json, toml otherwise.
         filepath: String,
@@ -72,6 +64,16 @@ pub enum Command {
         key: Keyspec,
         /// The new value.
         value: String,
+    },
+    /// Delete a key from the given file, returning the previous value if one existed
+    #[clap(aliases = &["del", "delete", "delet", "forget", "regret", "remove", "unset", "yank", "yeet"], display_order=3)]
+    Rm {
+        /// The toml file to read from. Pass '-' to read from stdin. If you read from stdin,
+        /// the normal output of the old value is suppressed. Instead the modified file is written
+        /// to stdout in json if you requested json, toml otherwise.
+        filepath: String,
+        /// The key to remove from the file. Use dots as path separators.
+        key: Keyspec,
     },
     /// Generate completions for the named shell.
     #[clap(display_order = 4)]
