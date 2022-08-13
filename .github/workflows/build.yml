@@ -52,11 +52,14 @@ jobs:
       - name: write out completions
         run:
           ./target/release/tomato completions bash > completions.bash
+          ./target/release/tomato completions zsh > completions.zsh
+          ./target/release/tomato completions fish > completions.fish
 
       - name: tar it up
         run:
-          tar cf LOUDBOT_x64_linux.tar -C target/x86_64-unknown-linux-musl/release LOUDBOT PRUNE SEED && tar f LOUDBOT_x64_linux.tar -r MALCOLM CATS SEEDS SHIPS STAR_FIGHTING && gzip LOUDBOT_x64_linux.tar
-
+          tar cf tomato_amd64_linux.tar -C target/release tomato
+          tar f tomato_amd64_linux.tar -r completions.bash completions.zsh completions.fish
+          gzip tomato_amd64_linux.tar
 
       - name: upload amd64 linux release
         uses: actions/upload-release-asset@v1
@@ -64,8 +67,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{needs.release.outputs.upload_url}}
-          asset_path: target/release/tomato
-          asset_name: tomato_amd64_linux
+          asset_path: tomato_amd64_linux.tar.gz
+          asset_name: tomato_amd64_linux.tar.gz
           asset_content_type: application/octet-stream
 
       - name: Build
@@ -75,14 +78,20 @@ jobs:
           use-cross: true
           args: --release --target aarch64-unknown-linux-gnu
 
+      - name: tar it up
+        run:
+          tar cf tomato_arm64_linux.tar -C target/release tomato
+          tar f tomato_arm64_linux.tar -r completions.bash completions.zsh completions.fish
+          gzip tomato_arm64_linux.tar
+
       - name: upload arm64 linux release
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{needs.release.outputs.upload_url}}
-          asset_path: target/aarch64-unknown-linux-gnu/release/tomato
-          asset_name: tomato_arm64_linux
+          asset_path: tomato_arm64_linux.tar.gz
+          asset_name: tomato_arm64_linux.tar.gz
           asset_content_type: application/octet-stream
 
 
@@ -104,25 +113,46 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-
+
       - run: cargo build --release
+
+      - name: write out completions
+        run:
+          ./target/release/tomato completions bash > completions.bash
+          ./target/release/tomato completions zsh > completions.zsh
+          ./target/release/tomato completions fish > completions.fish
+
+      - name: tar up the Mac Intel release
+        run:
+          tar cf tomato_intel_darwin.tar -C target/release tomato
+          tar f tomato_intel_darwin.tar -r completions.bash completions.zsh completions.fish
+          gzip tomato_intel_darwin.tar
+
       - name: upload darwin intel release
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{needs.release.outputs.upload_url}}
-          asset_path: target/release/tomato
-          asset_name: tomato_intel_darwin
+          asset_path: tomato_intel_darwin.tar.gz
+          asset_name: tomato_intel_darwin.tar.gz
           asset_content_type: application/octet-stream
 
       - run: rustup target install aarch64-apple-darwin
       - run: cargo build --target aarch64-apple-darwin --release
+
+      - name: tar up the aarch64 release
+        run:
+          tar cf tomato_aarch64_darwin.tar -C target/release tomato
+          tar f tomato_aarch64_darwin.tar -r completions.bash completions.zsh completions.fish
+          gzip tomato_aarch64_darwin.tar
+
       - name: upload darwin m1 release
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{needs.release.outputs.upload_url}}
-          asset_path: target/aarch64-apple-darwin/release/tomato
-          asset_name: tomato_aarch64_darwin
+          asset_path: tomato_aarch64_darwin.tar.gz
+          asset_name: tomato_aarch64_darwin.tar.gz
           asset_content_type: application/octet-stream
