@@ -8,6 +8,8 @@ readme = "README.md"
 license = "BlueOak-1.0.0"
 categories = ["command-line-utilities"]
 keywords = ["cli", "toml", "bash"]
+repository = "git@github.com:ceejbot/tomato.git"
+homepage = "https://github.com/ceejbot/tomato"
 
 [[bin]]
 name = "tomato"
