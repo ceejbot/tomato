@@ -35,8 +35,8 @@ pub struct Args {
     /// How to format the output: json, toml, bash, or raw
     #[clap(short, long, default_value = "raw")]
     format: Format,
-    /// Back up the file to <filepath>.bak if we write a new version. This option is ignored
-    /// when we're operating on stdin.
+    /// Back up the file to <filepath>.bak if we write a new version. This option
+    /// is ignored when we're operating on stdin.
     #[clap(long, short)]
     backup: bool,
     #[clap(subcommand)]
