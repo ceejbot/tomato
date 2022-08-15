@@ -20,7 +20,7 @@ use keys::*;
 ///
 /// Keys are written using `.` to separate path segments. You can use `array[idx]` syntax to index
 /// into arrays if you want to. For example, to get the name of the current crate you're working on,
-/// you'd run `tomato Cargo.toml get package.name`.
+/// you'd run `tomato get Cargo.toml package.name`.
 ///
 /// By default tomato emits data in a form suitable for immediate use in bash scripts if they are
 /// primitive values: strings are unquoted, for instance. If you want to use more complex data
