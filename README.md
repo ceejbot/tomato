@@ -15,7 +15,7 @@ To install:
 ```shell
 # using homebrew:
 brew tap ceejbot/tap
-brew install
+brew install tomato
 
 # if you have rust installed and prefer to build from source:
 cargo install tomato-toml
@@ -132,15 +132,6 @@ $ tomato --format json del Cargo.toml package.categories[0]
 
 Look at the `examples/` directory for some sample bash scripts with more varied examples,
 including examples of using lists and associative arrays in bash.
-
-## TODO
-
-Remaining work:
-
-- complete the tests
-	- datetimes
-	- tables
-	- arrays of tables
 
 ## CONTRIBUTING
 
