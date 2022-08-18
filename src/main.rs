@@ -26,7 +26,7 @@ use keys::*;
 /// primitive values: strings are unquoted, for instance. If you want to use more complex data
 /// types, consider one of the other output formats.
 ///
-/// To read from stdin instead of a file, pass '-' as the filename. Operating on stdin changes
+/// To read from stdin instead of a file, omit the file argument. Operating on stdin changes
 /// the behavior of set and rm somewhat, under the assumption that you are using this tool in
 /// a shell script. If you read from stdin, normal output (the old value) is suppressed. Instead
 /// the modified file is written to stdout in json if you requested json, toml otherwise.
@@ -48,32 +48,32 @@ pub enum Command {
     /// Get the value of a key from the given file
     #[clap(display_order = 1)]
     Get {
-        /// The toml file to read from. Pass '-' to read from stdin.
-        filepath: String,
         /// The key to look for. Use dots as path separators.
         key: Keyspec,
+        /// The toml file to read from. Omit to read from stdin.
+        file: Option<String>,
     },
     /// Set a key to the given value, returning the previous value if one existed.
     #[clap(display_order = 2)]
     Set {
-        /// The toml file to read from. Pass '-' to read from stdin. If you read from stdin,
-        /// the normal output of the old value is suppressed. Instead the modified file is written
-        /// to stdout in json if you requested json, toml otherwise.
-        filepath: String,
         /// The key to set a value for. Use dots as path separators.
         key: Keyspec,
         /// The new value.
         value: String,
+        /// The toml file to read from. Omit to read from stdin. If you read from stdin,
+        /// the normal output of the old value is suppressed. Instead the modified file is written
+        /// to stdout in json if you requested json, toml otherwise.
+        file: Option<String>,
     },
     /// Delete a key from the given file, returning the previous value if one existed
     #[clap(aliases = &["del", "delete", "delet", "forget", "regret", "remove", "unset", "yank", "yeet"], display_order=3)]
     Rm {
-        /// The toml file to read from. Pass '-' to read from stdin. If you read from stdin,
-        /// the normal output of the old value is suppressed. Instead the modified file is written
-        /// to stdout in json if you requested json, toml otherwise.
-        filepath: String,
         /// The key to remove from the file. Use dots as path separators.
         key: Keyspec,
+        /// The toml file to read from. Omit to read from stdin. If you read from stdin,
+        /// the normal output of the old value is suppressed. Instead the modified file is written
+        /// to stdout in json if you requested json, toml otherwise.
+        file: Option<String>,
     },
     /// Generate completions for the named shell.
     #[clap(display_order = 4)]
@@ -112,22 +112,19 @@ impl FromStr for Format {
 
 /// Read the toml file and parse it. Respond with an error that gets propagated up
 /// if the file is not valid toml.
-pub fn parse_file(fpath: &str) -> anyhow::Result<Document, anyhow::Error> {
+pub fn parse_file(maybepath: Option<&String>) -> anyhow::Result<Document, anyhow::Error> {
     let mut data = String::new();
-    match fpath {
-        "-" => {
-            let mut reader = BufReader::new(std::io::stdin());
-            reader.read_to_string(&mut data)?;
-        }
-        _ => {
-            let file = File::open(fpath)?;
-            let mut reader = BufReader::new(file);
-            reader.read_to_string(&mut data)?;
-        }
-    };
+    if let Some(ref fpath) = maybepath {
+        let file = File::open(fpath)?;
+        let mut reader = BufReader::new(file);
+        reader.read_to_string(&mut data)?;
+    } else {
+        let mut reader = BufReader::new(std::io::stdin());
+        reader.read_to_string(&mut data)?;
+    }
     let parsed = data
         .parse::<Document>()
-        .unwrap_or_else(|_| panic!("{}", format!("The file {} is not valid toml.", fpath)));
+        .unwrap_or_else(|_| panic!("{}", format!("The file {:?} is not valid toml.", maybepath)));
 
     Ok(parsed)
 }
@@ -296,42 +293,38 @@ fn main() -> anyhow::Result<(), anyhow::Error> {
     let args = Args::parse();
 
     match args.cmd {
-        Command::Get { filepath, key } => {
-            let mut toml = parse_file(&filepath)?;
+        Command::Get { key, file } => {
+            let mut toml = parse_file(file.as_ref())?;
             let item = get_key(&mut toml, &key)?;
             println!("{}", format_item(&item, args.format));
         }
-        Command::Rm { filepath, key } => {
-            let mut toml = parse_file(&filepath)?;
+        Command::Rm { key, file } => {
+            let mut toml = parse_file(file.as_ref())?;
             let original = remove_key(&mut toml, &key)?;
-            match filepath.as_str() {
-                "-" => {
+            match file {
+                None => {
                     match args.format {
                         Format::Json => println!("{}", format_item(toml.as_item(), args.format)),
                         _ => println!("{toml}"),
                     };
                 }
-                _ => {
+                Some(filepath) => {
                     write_file(&toml, &filepath, args.backup)?;
                     println!("{}", format_item(&original, args.format));
                 }
             }
         }
-        Command::Set {
-            filepath,
-            key,
-            value,
-        } => {
-            let mut toml = parse_file(&filepath)?;
+        Command::Set { key, value, file } => {
+            let mut toml = parse_file(file.as_ref())?;
             let original = set_key(&mut toml, &key, &value)?;
-            match filepath.as_str() {
-                "-" => {
+            match file {
+                None => {
                     match args.format {
                         Format::Json => println!("{}", format_item(toml.as_item(), args.format)),
                         _ => println!("{toml}"),
                     };
                 }
-                _ => {
+                Some(filepath) => {
                     write_file(&toml, &filepath, args.backup)?;
                     println!("{}", format_item(&original, args.format));
                 }

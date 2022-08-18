@@ -37,9 +37,9 @@ If you need to convert among JSON, YAML, and TOML, check out
 
 The short version:
 
-* Get a key: `tomato get <file> <dotted.key>`
-* Set a key: `tomato set <file> <dotted.key> <value>`
-* Delete a key: `tomato rm <file> <dotted.key>` (with lots of aliases for `rm`)
+* Get a key: `tomato get <dotted.key> <file>`
+* Set a key: `tomato set <dotted.key> <value> <file>`
+* Delete a key: `tomato rm <dotted.key> <file>` (with lots of aliases for `rm`)
 
 The `set` and `rm` subcommands modify the input file in place. Thanks to the magic of
 [toml_edit](https://lib.rs/crates/toml_edit), they do so without disturbing whitespace
@@ -65,8 +65,8 @@ By default tomato emits data in a form suitable for immediate use in bash script
 primitive values: strings are unquoted, for instance. If you want to use more complex data types,
 consider one of the other output formats.
 
-To read from stdin instead of a file, pass '-' as the filename. Operating on stdin changes the
-behavior of set and rm somewhat, under the assumption that you are using this tool in a shell
+To read from stdin instead of a file, omit the file from the arguments. Operating on stdin changes
+the behavior of set and rm somewhat, under the assumption that you are using this tool in a shell
 script. If you read from stdin, normal output (the old value) is suppressed. Instead the modified
 file is written to stdout in json if you requested json, toml otherwise. The 'bash' format option is
 ignored.
@@ -106,27 +106,27 @@ exits with a non-zero status with a message printed to stderr if the target key 
 Here are some examples run against the Cargo manifest for this project:
 
 ```shell
-$ tomato get Cargo.toml package.name
+$ tomato get package.name Cargo.toml
 tomato
-$ tomato --format json get Cargo.toml package.name
+$ tomato --format json get package.name Cargo.toml
 "tomato"
-$ cat Cargo.toml | tomato get - package.name
+$ cat Cargo.toml | tomato get package.name
 tomato
 
 # set examples
-$ tomato set Cargo.toml package.name broccoli
+$ tomato set package.name broccoli Cargo.toml
 tomato
-$ tomato set Cargo.toml package.keywords[1] yaml
+$ tomato set package.keywords[1] yaml Cargo.toml
 toml
 
 # Keys that don't exist
-$ tomato get Cargo.toml dependencies.toml_edit[0]
+$ tomato get dependencies.toml_edit[0] Cargo.toml
 
-$ tomato set Cargo.toml dependencies.toml_edit[0] "first!"
+$ tomato set dependencies.toml_edit[0] "first!" Cargo.toml
 Error: unable to index into non-array at dependencies.toml_edit.0
 
 # rm has a number of aliases to prevent user frustration
-$ tomato --format json del Cargo.toml package.categories[0]
+$ tomato --format json del package.categories[0] Cargo.toml
 "command-line-utilities"
 ```
 

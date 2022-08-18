@@ -24,6 +24,8 @@ install:
 # Use tomato to set the crate version to the passed in version, commit,
 # and create a git tag `v{version}`. Will not act if there are uncommitted
 # changes extant.
+
+# Set the crate version and tag the repo to match.
 tag VERSION:
 	#!/usr/bin/env bash
 	status=$(git status --porcelain)
@@ -31,7 +33,7 @@ tag VERSION:
 		echo "There are uncommitted changes! Cowardly refusing to act."
 		exit 1
 	fi
-	cargo run --quiet -- set Cargo.toml package.version {{VERSION}}
+	cargo run --quiet -- set package.version {{VERSION}} Cargo.toml
 	# update the lock file
 	cargo check
 	git commit Cargo.toml Cargo.lock -m "v{{VERSION}}"
