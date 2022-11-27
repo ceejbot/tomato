@@ -75,6 +75,16 @@ pub enum Command {
         /// to stdout in json if you requested json, toml otherwise.
         file: Option<String>,
     },
+    /// Append the given value to an array, returning the previous array if one existed.
+    #[clap(display_order = 1)]
+    Append {
+        /// The key to look for. Use dots as path separators. Must
+        key: Keyspec,
+        /// The new value.
+        value: String,
+        /// The toml file to read from. Omit to read from stdin.
+        file: Option<String>,
+    },
     /// Generate completions for the named shell.
     #[clap(display_order = 4)]
     Completions {
@@ -206,7 +216,7 @@ pub fn remove_key(toml: &mut Document, dotted_key: &Keyspec) -> Result<Item, any
 
 /// Set the given key to the new value, and respond with the original value.
 /// Replaces null nodes if the parent was found, adding a new key to the
-/// document. Reponds with an error if the key included an index into an
+/// document. Responds with an error if the key included an index into an
 /// array for a non-array node in the document.
 pub fn set_key(
     toml: &mut Document,
@@ -240,6 +250,38 @@ pub fn set_key(
     Ok(original)
 }
 
+/// Append the given value to the array at the given key and respond with
+/// the original array value.
+/// Replaces null nodes if the parent was found, adding a new key to the
+/// document. Responds with an error if the key exists and is not an array
+/// or if the key included an index into an array for a non-array node in
+/// the document.
+pub fn append_value(
+    toml: &mut Document,
+    dotted_key: &Keyspec,
+    value: &str,
+) -> Result<Item, anyhow::Error> {
+    let mut node: &mut Item = toml.as_item_mut();
+    let iterator = dotted_key.subkeys.iter();
+    let mut found: Option<&mut Item>;
+
+    for k in iterator {
+        found = get_in_node(k, node);
+        if found.is_none() {
+            anyhow::bail!("unable to index into non-array at {}", dotted_key);
+        }
+        node = found.unwrap();
+    }
+
+    let original = node.clone();
+
+    node.or_insert(Item::Value(Value::Array(toml_edit::Array::new())))
+        .as_array_mut()
+        .ok_or_else(|| anyhow::anyhow!("unable to append to a non-array at {}", dotted_key))?
+        .push(value);
+
+    Ok(original)
+}
 /// Format the given toml_edit item for the desired kind of output.
 pub fn format_item(item: &Item, output: Format) -> String {
     match output {
@@ -330,6 +372,22 @@ fn main() -> anyhow::Result<(), anyhow::Error> {
                 }
             }
         }
+        Command::Append { key, value, file } => {
+            let mut toml = parse_file(file.as_ref())?;
+            let original = append_value(&mut toml, &key, &value)?;
+            match file {
+                None => {
+                    match args.format {
+                        Format::Json => println!("{}", format_item(toml.as_item(), args.format)),
+                        _ => println!("{toml}"),
+                    };
+                }
+                Some(filepath) => {
+                    write_file(&toml, &filepath, args.backup)?;
+                    println!("{}", format_item(&original, args.format));
+                }
+            }
+        }
         Command::Completions { shell } => {
             use clap::CommandFactory;
             let mut app = Args::command();
@@ -378,6 +436,60 @@ mod tests {
         let item = set_key(&mut doc, &key, "bacon").expect("could not find this key");
         assert_eq!("frying", format_item(&item, Format::Raw));
         assert!(doc.to_string().contains("bacon"));
+    }
+
+    #[test]
+    fn append() {
+        let toml = include_str!("../fixtures/sample.toml");
+        let mut doc = toml
+            .parse::<Document>()
+            .expect("test doc should be valid toml");
+
+        let key = Keyspec::from_str("testcases.fruits").expect("test key should be valid");
+        let item = append_value(&mut doc, &key, "orange")
+            .expect("expected to be able to insert value 'orange'");
+        let formatted = format_toml(&item);
+        assert_eq!(
+            formatted,
+            r#"[ "tomato", "plum", "pluot", "kumquat", "persimmon" ]"#
+        );
+        assert!(doc.to_string().contains(
+            r#"fruits = [ "tomato", "plum", "pluot", "kumquat", "persimmon" , "orange"]"#
+        ));
+    }
+
+    #[test]
+    fn append_to_non_existing_key_creates_array() {
+        let toml = include_str!("../fixtures/sample.toml");
+        let mut doc = toml
+            .parse::<Document>()
+            .expect("test doc should be valid toml");
+
+        let key =
+            Keyspec::from_str("testcases.these.are.not.fruits").expect("test key should be valid");
+        let item = append_value(&mut doc, &key, "leek")
+            .expect("expected to be able to insert value 'leek'");
+        assert!(item.is_none());
+        assert!(doc
+            .to_string()
+            .contains(r#"these = { are = { not = { fruits = ["leek"] } } }"#));
+
+        let item = append_value(&mut doc, &key, "artichoke")
+            .expect("expected to be able to insert value 'artichoke'");
+        assert_eq!(format_toml(&item), r#"["leek"]"#);
+        assert!(doc
+            .to_string()
+            .contains(r#"these = { are = { not = { fruits = ["leek", "artichoke"] } } }"#));
+
+        let key = Keyspec::from_str("testcases.these.are.maybe.fruits")
+            .expect("test key should be valid");
+        let item = append_value(&mut doc, &key, "banana")
+            .expect("expected to be able to insert value 'banana'");
+        eprintln!("{}", doc.to_string());
+        assert!(item.is_none());
+        assert!(doc
+            .to_string()
+            .contains(r#"these = { are = { not = { fruits = ["leek", "artichoke"] }, maybe = { fruits = ["banana"] } } }"#));
     }
 
     #[test]
