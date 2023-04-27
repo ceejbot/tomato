@@ -71,7 +71,7 @@ jobs:
           asset_name: tomato_amd64_linux.tar.gz
           asset_content_type: application/octet-stream
 
-      - name: Build
+      - name: Build for arm64
         uses: actions-rs/cargo@v1
         with:
           command: build
