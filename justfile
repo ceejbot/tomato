@@ -36,6 +36,6 @@ tag VERSION:
 	cargo run --quiet -- set package.version {{VERSION}} Cargo.toml
 	# update the lock file
 	cargo check
-	git commit Cargo.toml Cargo.lock -m "v{{VERSION}}"
-	git tag "v{{VERSION}}"
-	echo "Release tagged for version v{{VERSION}}"
+	git commit Cargo.toml Cargo.lock -m "{{VERSION}}"
+	git tag "{{VERSION}}"
+	echo "Release tagged for version {{VERSION}}"
