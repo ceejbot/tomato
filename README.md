@@ -101,6 +101,31 @@ SUBCOMMANDS:
 `get` and `rm` both print empty string to stdout if the target key is not found. `set`
 exits with a non-zero status with a message printed to stderr if the target key is not found.
 
+## Setting booleans and numbers
+
+Tomato treats booleans and numbers slightly differently than ordinary values in its `set` command. It's likely that you'll need to set both true-the-boolean and "true"-the-string as values at some point. To distinguish `true` the boolean from `"true"` the string on the command line, use quotes around the string and do not use them around the boolean. Remember that your shell strips the first layer of quoting, so you need to use two layers! That is, use `'"true"'` to get a string, and `true` to get a boolean.
+
+Here are examples that work with the test fixture:
+
+```terminal
+# set a value to a boolean
+➜ tomato -f toml set testcases.are_complete true fixtures/sample.toml
+false
+➜ tomato -f toml get testcases.are_complete fixtures/sample.toml
+true
+# set a value to a string
+➜ tomato -f toml set testcases.are_complete '"false"' fixtures/sample.toml
+true
+# set a value to a number
+➜ tomato -f toml set testcases.are_complete 20 fixtures/sample.toml
+"false"
+# set a value to a string that happens to be a number
+➜ tomato -f toml set testcases.are_complete "'20'" fixtures/sample.toml
+20
+➜ tomato -f toml get testcases.are_complete fixtures/sample.toml
+"20"
+```
+
 ## Examples
 
 Here are some examples run against the Cargo manifest for this project:

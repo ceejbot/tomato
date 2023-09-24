@@ -33,11 +33,11 @@ use keys::*;
 /// The 'bash' format option is ignored.
 pub struct Args {
     /// How to format the output: json, toml, bash, or raw
-    #[clap(short, long, default_value = "raw")]
+    #[clap(short, long, global = true, default_value = "raw")]
     format: Format,
     /// Back up the file to <filepath>.bak if we write a new version. This option
     /// is ignored when we're operating on stdin.
-    #[clap(long, short)]
+    #[clap(long, short, global = true)]
     backup: bool,
     #[clap(subcommand)]
     cmd: Command,
@@ -59,7 +59,7 @@ pub enum Command {
         /// The key to set a value for. Use dots as path separators.
         key: Keyspec,
         /// The new value.
-        value: String,
+        value: TomlVal,
         /// The toml file to read from. Omit to read from stdin. If you read from stdin,
         /// the normal output of the old value is suppressed. Instead the modified file is written
         /// to stdout in json if you requested json, toml otherwise.
@@ -117,6 +117,43 @@ impl FromStr for Format {
             "toml" => Ok(Format::Toml),
             _ => Err(anyhow::anyhow!("{input} is not a supported output type")),
         }
+    }
+}
+
+// A wrapper around toml_edit values to allow us to distinguish between `"true"`
+// (a string) and `true` (a boolean) as command-line arguments.
+#[derive(Debug, Clone)]
+pub struct TomlVal {
+    inner: Value,
+}
+
+impl FromStr for TomlVal {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let quoted_string = regex::Regex::new(r#"^"(.+)"|'(.+)'$"#).unwrap();
+        let inner = if let Some(captures) = quoted_string.captures(s) {
+            let core = if let Some(_c) = captures.get(1) {
+                captures[1].to_string()
+            } else if let Some(_c) = captures.get(2) {
+                captures[2].to_string()
+            } else {
+                s.to_string()
+            };
+            core.into()
+        } else if s == "true" {
+            Value::try_from(true).unwrap()
+        } else if s == "false" {
+            Value::try_from(false).unwrap()
+        } else if let Ok(v) = i64::from_str(s) {
+            Value::try_from(v).unwrap()
+        } else if let Ok(v) = f64::from_str(s) {
+            Value::try_from(v).unwrap()
+        } else {
+            s.into()
+        };
+
+        Ok(TomlVal { inner })
     }
 }
 
@@ -221,7 +258,7 @@ pub fn remove_key(toml: &mut Document, dotted_key: &Keyspec) -> Result<Item, any
 pub fn set_key(
     toml: &mut Document,
     dotted_key: &Keyspec,
-    value: &str,
+    value: &Value,
 ) -> Result<Item, anyhow::Error> {
     let mut node: &mut Item = toml.as_item_mut();
     let iterator = dotted_key.subkeys.iter();
@@ -282,6 +319,7 @@ pub fn append_value(
 
     Ok(original)
 }
+
 /// Format the given toml_edit item for the desired kind of output.
 pub fn format_item(item: &Item, output: Format) -> String {
     match output {
@@ -358,7 +396,8 @@ fn main() -> anyhow::Result<(), anyhow::Error> {
         }
         Command::Set { key, value, file } => {
             let mut toml = parse_file(file.as_ref())?;
-            let original = set_key(&mut toml, &key, &value)?;
+            let inner = value.inner;
+            let original = set_key(&mut toml, &key, &inner)?;
             match file {
                 None => {
                     match args.format {
@@ -427,13 +466,15 @@ mod tests {
             .expect("test doc should be valid toml");
 
         let key = Keyspec::from_str("testcases.hashes.color").expect("test key should be valid");
-        let item = set_key(&mut doc, &key, "taupe").expect("expected to find key 'hashes.color'");
+        let taupe = Value::from("taupe");
+        let item = set_key(&mut doc, &key, &taupe).expect("expected to find key 'hashes.color'");
         assert_eq!("brown", format_item(&item, Format::Raw));
         assert!(doc.to_string().contains("color = \"taupe\""));
 
         let key =
             Keyspec::from_str("testcases.hashes.mats[3]").expect("expected this key to be valid");
-        let item = set_key(&mut doc, &key, "bacon").expect("could not find this key");
+        let bacon = Value::from("bacon");
+        let item = set_key(&mut doc, &key, &bacon).expect("could not find this key");
         assert_eq!("frying", format_item(&item, Format::Raw));
         assert!(doc.to_string().contains("bacon"));
     }
@@ -544,5 +585,116 @@ mod tests {
         let item = get_key(&mut doc, &key).expect("expected to find key testcases.are_complete");
         let formatted = format_toml(&item);
         assert_eq!(formatted, r#"false"#);
+    }
+
+    #[test]
+    fn tomlval_parser_handles_booleans() {
+        let quoted = r#""false""#;
+        let tval = TomlVal::from_str(quoted).expect("conversion should work");
+        match tval.inner {
+            Value::String(s) => {
+                assert_eq!(*s.value(), "false");
+            }
+            _ => {
+                eprintln!("{:?}", tval.inner);
+                assert!(false, "should have been a string");
+            }
+        }
+
+        let singlequoted = "'true'";
+        let tval = TomlVal::from_str(singlequoted).expect("conversion should work");
+        match tval.inner {
+            Value::String(s) => {
+                assert_eq!(*s.value(), "true");
+            }
+            _ => {
+                eprintln!("{:?}", tval.inner);
+                assert!(false, "should have been a string");
+            }
+        }
+
+        let unquoted = "false";
+        let tval2 = TomlVal::from_str(unquoted).expect("conversion should work");
+        match tval2.inner {
+            Value::Boolean(b) => {
+                assert_eq!(*b.value(), false);
+            }
+            _ => {
+                eprintln!("{:?}", tval2.inner);
+                assert!(false, "should have been a boolean");
+            }
+        }
+    }
+
+    #[test]
+    fn tomlval_parser_handles_numbers() {
+        let quoted = r#""1""#;
+        let tval = TomlVal::from_str(quoted).expect("conversion should work");
+        match tval.inner {
+            Value::String(s) => {
+                assert_eq!(*s.value(), "1");
+            }
+            _ => {
+                eprintln!("{:?}", tval.inner);
+                assert!(false, "should have been a string");
+            }
+        }
+
+        let inty = "1";
+        let tval2 = TomlVal::from_str(inty).expect("conversion should work");
+        match tval2.inner {
+            Value::Integer(n) => {
+                assert_eq!(*n.value(), 1);
+            }
+            _ => {
+                eprintln!("{:?}", tval2.inner);
+                assert!(false, "should have been an integer");
+            }
+        }
+
+        let floaty = "1.5";
+        let floatyval = TomlVal::from_str(floaty).expect("conversion should work");
+        match floatyval.inner {
+            Value::Float(n) => {
+                assert_eq!(*n.value(), 1.5);
+            }
+            _ => {
+                eprintln!("{:?}", floatyval.inner);
+                assert!(false, "should have been an integer");
+            }
+        }
+    }
+
+    #[test]
+    fn can_set_booleans() {
+        let toml = include_str!("../fixtures/sample.toml");
+        let mut doc = toml
+            .parse::<Document>()
+            .expect("test doc should be valid toml");
+
+        let key = Keyspec::from_str("testcases.are_passing").expect("test key should be valid");
+        let newval = Value::from(false);
+        let previous =
+            set_key(&mut doc, &key, &newval).expect("test fixture known to contain the test key");
+        let prevval = previous
+            .as_value()
+            .expect("the previous value should be a valid toml value");
+        match prevval {
+            Value::Boolean(b) => {
+                assert!(*b.value());
+            }
+            _ => panic!("fetched value was supposed to be a boolean!"),
+        }
+
+        let current = get_key(&mut doc, &key).expect("test fixture known to contain the test key");
+        let curval = current
+            .as_value()
+            .expect("the new value should be a valid toml value");
+        match curval {
+            Value::Boolean(b) => {
+                assert_eq!(*b.value(), false);
+            }
+            _ => panic!("fetched value was supposed to be a boolean!"),
+        }
     }
 }
