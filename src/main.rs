@@ -81,7 +81,7 @@ pub enum Command {
         /// The key to look for. Use dots as path separators. Must
         key: Keyspec,
         /// The new value.
-        value: String,
+        value: TomlVal,
         /// The toml file to read from. Omit to read from stdin.
         file: Option<String>,
     },
@@ -149,6 +149,10 @@ impl FromStr for TomlVal {
             Value::try_from(v).unwrap()
         } else if let Ok(v) = f64::from_str(s) {
             Value::try_from(v).unwrap()
+        } else if s == "[]" {
+            Value::Array(toml_edit::Array::new())
+        } else if s == "{}" {
+            Value::InlineTable(toml_edit::InlineTable::new())
         } else {
             s.into()
         };
@@ -296,7 +300,7 @@ pub fn set_key(
 pub fn append_value(
     toml: &mut Document,
     dotted_key: &Keyspec,
-    value: &str,
+    value: &TomlVal,
 ) -> Result<Item, anyhow::Error> {
     let mut node: &mut Item = toml.as_item_mut();
     let iterator = dotted_key.subkeys.iter();
@@ -315,7 +319,7 @@ pub fn append_value(
     node.or_insert(Item::Value(Value::Array(toml_edit::Array::new())))
         .as_array_mut()
         .ok_or_else(|| anyhow::anyhow!("unable to append to a non-array at {}", dotted_key))?
-        .push(value);
+        .push(value.inner.clone());
 
     Ok(original)
 }
@@ -487,7 +491,7 @@ mod tests {
             .expect("test doc should be valid toml");
 
         let key = Keyspec::from_str("testcases.fruits").expect("test key should be valid");
-        let item = append_value(&mut doc, &key, "orange")
+        let item = append_value(&mut doc, &key, &TomlVal::from_str("orange").unwrap())
             .expect("expected to be able to insert value 'orange'");
         let formatted = format_toml(&item);
         assert_eq!(
@@ -508,14 +512,14 @@ mod tests {
 
         let key =
             Keyspec::from_str("testcases.these.are.not.fruits").expect("test key should be valid");
-        let item = append_value(&mut doc, &key, "leek")
+        let item = append_value(&mut doc, &key, &TomlVal::from_str("leek").unwrap())
             .expect("expected to be able to insert value 'leek'");
         assert!(item.is_none());
         assert!(doc
             .to_string()
             .contains(r#"these = { are = { not = { fruits = ["leek"] } } }"#));
 
-        let item = append_value(&mut doc, &key, "artichoke")
+        let item = append_value(&mut doc, &key, &TomlVal::from_str("artichoke").unwrap())
             .expect("expected to be able to insert value 'artichoke'");
         assert_eq!(format_toml(&item), r#"["leek"]"#);
         assert!(doc
@@ -524,7 +528,7 @@ mod tests {
 
         let key = Keyspec::from_str("testcases.these.are.maybe.fruits")
             .expect("test key should be valid");
-        let item = append_value(&mut doc, &key, "banana")
+        let item = append_value(&mut doc, &key, &TomlVal::from_str("banana").unwrap())
             .expect("expected to be able to insert value 'banana'");
         eprintln!("{}", doc.to_string());
         assert!(item.is_none());
@@ -661,6 +665,60 @@ mod tests {
             _ => {
                 eprintln!("{:?}", floatyval.inner);
                 assert!(false, "should have been an integer");
+            }
+        }
+    }
+
+    #[test]
+    fn tomlval_parser_handles_inline_tables() {
+        let quoted = r#""{}""#;
+        let tval = TomlVal::from_str(quoted).expect("conversion should work");
+        match tval.inner {
+            Value::String(s) => {
+                assert_eq!(*s.value(), "{}");
+            }
+            _ => {
+                eprintln!("{:?}", tval.inner);
+                assert!(false, "should have been a string");
+            }
+        }
+
+        let inty = "{}";
+        let tval2 = TomlVal::from_str(inty).expect("conversion should work");
+        match tval2.inner {
+            Value::InlineTable(t) => {
+                assert_eq!(t.len(), 0);  // It should be empty to start
+            }
+            _ => {
+                eprintln!("{:?}", tval2.inner);
+                assert!(false, "should have been an inline table");
+            }
+        }
+    }
+
+    #[test]
+    fn tomlval_parser_handles_inline_arrays() {
+        let quoted = r#""[]""#;
+        let tval = TomlVal::from_str(quoted).expect("conversion should work");
+        match tval.inner {
+            Value::String(s) => {
+                assert_eq!(*s.value(), "[]");
+            }
+            _ => {
+                eprintln!("{:?}", tval.inner);
+                assert!(false, "should have been a string");
+            }
+        }
+
+        let inty = "[]";
+        let tval2 = TomlVal::from_str(inty).expect("conversion should work");
+        match tval2.inner {
+            Value::Array(a) => {
+                assert_eq!(a.len(), 0);  // It should be empty to start
+            }
+            _ => {
+                eprintln!("{:?}", tval2.inner);
+                assert!(false, "should have been an array");
             }
         }
     }
