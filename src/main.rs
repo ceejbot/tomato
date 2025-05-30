@@ -80,6 +80,9 @@ pub enum Command {
     Append {
         /// The key to look for. Use dots as path separators. Must
         key: Keyspec,
+        /// Appends the new `value` to the array only if it does not yet exist in the array. Default: `false`.
+        #[clap(action, long, short, default_value = "false")]
+        unique: bool,
         /// The new value.
         value: String,
         /// The toml file to read from. Omit to read from stdin.
@@ -142,13 +145,13 @@ impl FromStr for TomlVal {
             };
             core.into()
         } else if s == "true" {
-            Value::try_from(true).unwrap()
+            Value::from(true)
         } else if s == "false" {
-            Value::try_from(false).unwrap()
+            Value::from(false)
         } else if let Ok(v) = i64::from_str(s) {
-            Value::try_from(v).unwrap()
+            Value::from(v)
         } else if let Ok(v) = f64::from_str(s) {
-            Value::try_from(v).unwrap()
+            Value::from(v)
         } else {
             s.into()
         };
@@ -297,6 +300,7 @@ pub fn append_value(
     toml: &mut Document,
     dotted_key: &Keyspec,
     value: &str,
+    unique: bool,
 ) -> Result<Item, anyhow::Error> {
     let mut node: &mut Item = toml.as_item_mut();
     let iterator = dotted_key.subkeys.iter();
@@ -312,10 +316,19 @@ pub fn append_value(
 
     let original = node.clone();
 
-    node.or_insert(Item::Value(Value::Array(toml_edit::Array::new())))
+    let array = node
+        .or_insert(Item::Value(Value::Array(toml_edit::Array::new())))
         .as_array_mut()
-        .ok_or_else(|| anyhow::anyhow!("unable to append to a non-array at {}", dotted_key))?
-        .push(value);
+        .ok_or_else(|| anyhow::anyhow!("unable to append to a non-array at {}", dotted_key))?;
+
+    if !unique
+        || !array.iter().any(|v| match v {
+            Value::String(s) => s.value() == value,
+            _ => false,
+        })
+    {
+        array.push(value);
+    }
 
     Ok(original)
 }
@@ -411,9 +424,14 @@ fn main() -> anyhow::Result<(), anyhow::Error> {
                 }
             }
         }
-        Command::Append { key, value, file } => {
+        Command::Append {
+            key,
+            value,
+            unique,
+            file,
+        } => {
             let mut toml = parse_file(file.as_ref())?;
-            let original = append_value(&mut toml, &key, &value)?;
+            let original = append_value(&mut toml, &key, &value, unique)?;
             match file {
                 None => {
                     match args.format {
@@ -487,7 +505,7 @@ mod tests {
             .expect("test doc should be valid toml");
 
         let key = Keyspec::from_str("testcases.fruits").expect("test key should be valid");
-        let item = append_value(&mut doc, &key, "orange")
+        let item = append_value(&mut doc, &key, "orange", false)
             .expect("expected to be able to insert value 'orange'");
         let formatted = format_toml(&item);
         assert_eq!(
@@ -500,6 +518,51 @@ mod tests {
     }
 
     #[test]
+    fn append_unique_value() {
+        let toml = include_str!("../fixtures/sample.toml");
+        let mut doc = toml
+            .parse::<Document>()
+            .expect("test doc should be valid toml");
+
+        let key = Keyspec::from_str("testcases.fruits").expect("test key should be valid");
+        append_value(&mut doc, &key, "tomato", true)
+            .expect("expected to be able to insert value 'tomato' as unique without error");
+        let fruits = doc
+            .get("testcases")
+            .expect("expected to find 'testcases'")
+            .get("fruits")
+            .expect("expected to find 'fruits' in 'testcases'")
+            .as_array()
+            .expect("expected 'fruits' as array");
+        let tomatoes_count = fruits
+            .iter()
+            .filter(|f| f.as_str().unwrap() == "tomato")
+            .count();
+        assert_eq!(
+            tomatoes_count, 1,
+            "expected 'fruits' to contain only 1 instance of 'tomato'"
+        );
+
+        append_value(&mut doc, &key, "tomato", false)
+            .expect("expected to be able to insert value 'tomato'");
+        let fruits = doc
+            .get("testcases")
+            .expect("expected to find 'testcases'")
+            .get("fruits")
+            .expect("expected to find 'fruits' in 'testcases'")
+            .as_array()
+            .expect("expected 'fruits' as array");
+        let tomatoes_count = fruits
+            .iter()
+            .filter(|f| f.as_str().unwrap() == "tomato")
+            .count();
+        assert_eq!(
+            tomatoes_count, 2,
+            "expected 'fruits' to contain 2 instances of 'tomato'"
+        );
+    }
+
+    #[test]
     fn append_to_non_existing_key_creates_array() {
         let toml = include_str!("../fixtures/sample.toml");
         let mut doc = toml
@@ -508,14 +571,14 @@ mod tests {
 
         let key =
             Keyspec::from_str("testcases.these.are.not.fruits").expect("test key should be valid");
-        let item = append_value(&mut doc, &key, "leek")
+        let item = append_value(&mut doc, &key, "leek", false)
             .expect("expected to be able to insert value 'leek'");
         assert!(item.is_none());
         assert!(doc
             .to_string()
             .contains(r#"these = { are = { not = { fruits = ["leek"] } } }"#));
 
-        let item = append_value(&mut doc, &key, "artichoke")
+        let item = append_value(&mut doc, &key, "artichoke", false)
             .expect("expected to be able to insert value 'artichoke'");
         assert_eq!(format_toml(&item), r#"["leek"]"#);
         assert!(doc
@@ -524,9 +587,9 @@ mod tests {
 
         let key = Keyspec::from_str("testcases.these.are.maybe.fruits")
             .expect("test key should be valid");
-        let item = append_value(&mut doc, &key, "banana")
+        let item = append_value(&mut doc, &key, "banana", false)
             .expect("expected to be able to insert value 'banana'");
-        eprintln!("{}", doc.to_string());
+        eprintln!("{doc}");
         assert!(item.is_none());
         assert!(doc
             .to_string()
