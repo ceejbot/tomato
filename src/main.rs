@@ -1,10 +1,15 @@
-use clap::{Parser, Subcommand};
-use clap_complete::{generate, Shell};
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::BufReader;
 use std::str::FromStr;
-use toml_edit::{Document, Item, Value};
+use std::sync::LazyLock;
+
+use clap::builder::styling::AnsiColor;
+use clap::builder::Styles;
+use clap::{Parser, Subcommand};
+use clap_complete::{generate, Shell};
+use regex::Regex;
+use toml_edit::{DocumentMut, Item, Value};
 
 mod json;
 use json::format_json;
@@ -12,9 +17,11 @@ mod bash;
 use bash::format_bash;
 mod keys;
 use keys::*;
+mod errors;
+use errors::TomatoError;
 
 #[derive(Parser, Debug)]
-#[clap(name = "🍅 tomato", version)]
+#[clap(name = "🍅 tomato", version, styles = v3_styles())]
 /// A command-line tool to get and set values in toml files while preserving comments and
 /// formatting.
 ///
@@ -76,7 +83,7 @@ pub enum Command {
         file: Option<String>,
     },
     /// Append the given value to an array, returning the previous array if one existed.
-    #[clap(display_order = 1)]
+    #[clap(display_order = 4)]
     Append {
         /// The key to look for. Use dots as path separators. Must
         key: Keyspec,
@@ -86,9 +93,9 @@ pub enum Command {
         file: Option<String>,
     },
     /// Generate completions for the named shell.
-    #[clap(display_order = 4)]
+    #[clap(display_order = 5)]
     Completions {
-        #[clap(arg_enum)]
+        #[clap(value_enum)]
         shell: Shell,
     },
 }
@@ -107,7 +114,7 @@ pub enum Format {
 }
 
 impl FromStr for Format {
-    type Err = anyhow::Error;
+    type Err = TomatoError;
 
     fn from_str(input: &str) -> Result<Self, Self::Err> {
         match input.to_lowercase().as_str() {
@@ -115,10 +122,13 @@ impl FromStr for Format {
             "bash" => Ok(Format::Bash),
             "json" => Ok(Format::Json),
             "toml" => Ok(Format::Toml),
-            _ => Err(anyhow::anyhow!("{input} is not a supported output type")),
+            _ => Err(TomatoError::UnsupportedOutputType(input.to_string())),
         }
     }
 }
+
+pub static QUOTED_STRING_REGEX: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"^"(.+)"|'(.+)'$"#).expect("quoted string regex is expected to compile"));
 
 // A wrapper around toml_edit values to allow us to distinguish between `"true"`
 // (a string) and `true` (a boolean) as command-line arguments.
@@ -128,11 +138,10 @@ pub struct TomlVal {
 }
 
 impl FromStr for TomlVal {
-    type Err = anyhow::Error;
+    type Err = TomatoError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let quoted_string = regex::Regex::new(r#"^"(.+)"|'(.+)'$"#).unwrap();
-        let inner = if let Some(captures) = quoted_string.captures(s) {
+        let inner = if let Some(captures) = QUOTED_STRING_REGEX.captures(s) {
             let core = if let Some(_c) = captures.get(1) {
                 captures[1].to_string()
             } else if let Some(_c) = captures.get(2) {
@@ -142,13 +151,13 @@ impl FromStr for TomlVal {
             };
             core.into()
         } else if s == "true" {
-            Value::try_from(true).unwrap()
+            Value::from(true)
         } else if s == "false" {
-            Value::try_from(false).unwrap()
+            Value::from(false)
         } else if let Ok(v) = i64::from_str(s) {
-            Value::try_from(v).unwrap()
+            Value::from(v)
         } else if let Ok(v) = f64::from_str(s) {
-            Value::try_from(v).unwrap()
+            Value::from(v)
         } else {
             s.into()
         };
@@ -159,7 +168,7 @@ impl FromStr for TomlVal {
 
 /// Read the toml file and parse it. Respond with an error that gets propagated up
 /// if the file is not valid toml.
-pub fn parse_file(maybepath: Option<&String>) -> anyhow::Result<Document, anyhow::Error> {
+pub fn parse_file(maybepath: Option<&String>) -> Result<DocumentMut, TomatoError> {
     let mut data = String::new();
     if let Some(ref fpath) = maybepath {
         let file = File::open(fpath)?;
@@ -169,14 +178,11 @@ pub fn parse_file(maybepath: Option<&String>) -> anyhow::Result<Document, anyhow
         let mut reader = BufReader::new(std::io::stdin());
         reader.read_to_string(&mut data)?;
     }
-    let parsed = data
-        .parse::<Document>()
-        .unwrap_or_else(|_| panic!("{}", format!("The file {:?} is not valid toml.", maybepath)));
 
-    Ok(parsed)
+    Ok(data.parse::<DocumentMut>()?)
 }
 
-pub fn write_file(toml: &Document, fpath: &str, backup: bool) -> anyhow::Result<(), anyhow::Error> {
+pub fn write_file(toml: &DocumentMut, fpath: &str, backup: bool) -> Result<(), TomatoError> {
     if backup {
         std::fs::copy(fpath, format!("{}.bak", fpath))?;
     }
@@ -203,16 +209,15 @@ pub fn get_in_node<'a>(key: &'a KeySegment, node: &'a mut Item) -> Option<&'a mu
 
 /// Given a full dotted-form key from the command-line, find the matching value
 /// in the given document. Responds with Item::None if not found.
-pub fn get_key(toml: &mut Document, dotted_key: &Keyspec) -> Result<Item, anyhow::Error> {
+pub fn get_key(toml: &mut DocumentMut, dotted_key: &Keyspec) -> Result<Item, TomatoError> {
     let mut node: &mut Item = toml.as_item_mut();
     let iterator = dotted_key.subkeys.iter();
 
     for k in iterator {
-        let found = get_in_node(k, node);
-        if found.is_none() {
+        let Some(found) = get_in_node(k, node) else {
             return Ok(Item::None);
-        }
-        node = found.unwrap();
+        };
+        node = found;
     }
 
     Ok(node.clone())
@@ -221,25 +226,23 @@ pub fn get_key(toml: &mut Document, dotted_key: &Keyspec) -> Result<Item, anyhow
 /// Remove the node corresponding to the given key. If the key was not found, we
 /// return an error saying so. Otherwise, we respond with the value that the key
 /// used to point to.
-pub fn remove_key(toml: &mut Document, dotted_key: &Keyspec) -> Result<Item, anyhow::Error> {
+pub fn remove_key(toml: &mut DocumentMut, dotted_key: &Keyspec) -> Result<Item, TomatoError> {
     let mut node: &mut Item = toml.as_item_mut();
     let mut parent_key: Keyspec = dotted_key.clone();
-    let target = parent_key.subkeys.pop();
-    if target.is_none() {
-        anyhow::bail!("You must pass a key to remove!!");
-    }
-    let target = target.unwrap();
+
+    let Some(target) = parent_key.subkeys.pop() else {
+        return Err(TomatoError::NoKeyToRemove);
+    };
     let iterator = parent_key.subkeys.iter();
 
     for k in iterator {
-        let found = get_in_node(k, node);
-        if found.is_none() {
-            anyhow::bail!("key {} not found in toml file", dotted_key);
+        let Some(found) = get_in_node(k, node) else {
+            return Err(TomatoError::KeyNotFound(dotted_key.to_string()));
+        };
+        if matches!(found, Item::None) {
+            return Err(TomatoError::KeyNotFound(dotted_key.to_string()));
         }
-        node = found.unwrap();
-        if let Item::None = node {
-            anyhow::bail!("key {} not found in toml file", dotted_key);
-        }
+        node = found;
     }
 
     if let Some(found) = get_in_node(&target, node) {
@@ -255,31 +258,21 @@ pub fn remove_key(toml: &mut Document, dotted_key: &Keyspec) -> Result<Item, any
 /// Replaces null nodes if the parent was found, adding a new key to the
 /// document. Responds with an error if the key included an index into an
 /// array for a non-array node in the document.
-pub fn set_key(
-    toml: &mut Document,
-    dotted_key: &Keyspec,
-    value: &Value,
-) -> Result<Item, anyhow::Error> {
+pub fn set_key(toml: &mut DocumentMut, dotted_key: &Keyspec, value: &Value) -> Result<Item, TomatoError> {
     let mut node: &mut Item = toml.as_item_mut();
     let iterator = dotted_key.subkeys.iter();
-    let mut found: Option<&mut Item>;
-
     for k in iterator {
-        found = get_in_node(k, node);
-        if found.is_none() {
-            anyhow::bail!("unable to index into non-array at {}", dotted_key);
-        }
-        node = found.unwrap();
+        let Some(found) = get_in_node(k, node) else {
+            return Err(TomatoError::CannotIndexIntoNonArray(dotted_key.to_string()));
+        };
+        node = found;
     }
 
     let original = node.clone();
     let existing: &mut Item = &mut *node;
 
     // Straight outta cargo-edit
-    let existing_decor = existing
-        .as_value()
-        .map(|v| v.decor().clone())
-        .unwrap_or_default();
+    let existing_decor = existing.as_value().map(|v| v.decor().clone()).unwrap_or_default();
     let mut new_value: Value = value.into();
     *new_value.decor_mut() = existing_decor;
     *existing = toml_edit::Item::Value(new_value);
@@ -293,28 +286,22 @@ pub fn set_key(
 /// document. Responds with an error if the key exists and is not an array
 /// or if the key included an index into an array for a non-array node in
 /// the document.
-pub fn append_value(
-    toml: &mut Document,
-    dotted_key: &Keyspec,
-    value: &str,
-) -> Result<Item, anyhow::Error> {
+pub fn append_value(toml: &mut DocumentMut, dotted_key: &Keyspec, value: &str) -> Result<Item, TomatoError> {
     let mut node: &mut Item = toml.as_item_mut();
     let iterator = dotted_key.subkeys.iter();
-    let mut found: Option<&mut Item>;
 
     for k in iterator {
-        found = get_in_node(k, node);
-        if found.is_none() {
-            anyhow::bail!("unable to index into non-array at {}", dotted_key);
-        }
-        node = found.unwrap();
+        let Some(found) = get_in_node(k, node) else {
+            return Err(TomatoError::CannotIndexIntoNonArray(dotted_key.to_string()));
+        };
+        node = found;
     }
 
     let original = node.clone();
 
     node.or_insert(Item::Value(Value::Array(toml_edit::Array::new())))
         .as_array_mut()
-        .ok_or_else(|| anyhow::anyhow!("unable to append to a non-array at {}", dotted_key))?
+        .ok_or_else(|| TomatoError::CannotAppendToNonArray(dotted_key.to_string()))?
         .push(value);
 
     Ok(original)
@@ -368,8 +355,16 @@ pub fn format_raw_value(v: Value) -> String {
     }
 }
 
+fn v3_styles() -> Styles {
+    Styles::styled()
+        .header(AnsiColor::Yellow.on_default())
+        .usage(AnsiColor::Green.on_default())
+        .literal(AnsiColor::Green.on_default())
+        .placeholder(AnsiColor::Green.on_default())
+}
+
 /// Parse command-line args and do whatever our user wants!
-fn main() -> anyhow::Result<(), anyhow::Error> {
+fn main() -> Result<(), TomatoError> {
     let args = Args::parse();
 
     match args.cmd {
@@ -444,16 +439,14 @@ mod tests {
     #[test]
     fn get() {
         let toml = include_str!("../fixtures/sample.toml");
-        let mut doc = toml
-            .parse::<Document>()
-            .expect("test doc should be valid toml");
+        let mut doc = toml.parse::<DocumentMut>().expect("test doc should be valid toml");
 
-        let key = Keyspec::from_str("testcases.hashes.color").unwrap();
+        let key = Keyspec::from_str("testcases.hashes.color").expect("test key should be valid");
         let item = get_key(&mut doc, &key).expect("expected to get key 'hashes.color'");
         assert_eq!("brown", format_item(&item, Format::Raw));
         assert_eq!("\"brown\"", format_item(&item, Format::Toml));
 
-        let key = Keyspec::from_str("testcases.hashes.mats[1]").unwrap();
+        let key = Keyspec::from_str("testcases.hashes.mats[1]").expect("test key should be valid");
         let item = get_key(&mut doc, &key).expect("expected this key to be valid");
         assert_eq!("salt", format_item(&item, Format::Raw));
     }
@@ -461,9 +454,7 @@ mod tests {
     #[test]
     fn set() {
         let toml = include_str!("../fixtures/sample.toml");
-        let mut doc = toml
-            .parse::<Document>()
-            .expect("test doc should be valid toml");
+        let mut doc = toml.parse::<DocumentMut>().expect("test doc should be valid toml");
 
         let key = Keyspec::from_str("testcases.hashes.color").expect("test key should be valid");
         let taupe = Value::from("taupe");
@@ -471,8 +462,7 @@ mod tests {
         assert_eq!("brown", format_item(&item, Format::Raw));
         assert!(doc.to_string().contains("color = \"taupe\""));
 
-        let key =
-            Keyspec::from_str("testcases.hashes.mats[3]").expect("expected this key to be valid");
+        let key = Keyspec::from_str("testcases.hashes.mats[3]").expect("expected this key to be valid");
         let bacon = Value::from("bacon");
         let item = set_key(&mut doc, &key, &bacon).expect("could not find this key");
         assert_eq!("frying", format_item(&item, Format::Raw));
@@ -482,106 +472,86 @@ mod tests {
     #[test]
     fn append() {
         let toml = include_str!("../fixtures/sample.toml");
-        let mut doc = toml
-            .parse::<Document>()
-            .expect("test doc should be valid toml");
+        let mut doc = toml.parse::<DocumentMut>().expect("test doc should be valid toml");
 
         let key = Keyspec::from_str("testcases.fruits").expect("test key should be valid");
-        let item = append_value(&mut doc, &key, "orange")
-            .expect("expected to be able to insert value 'orange'");
+        let item = append_value(&mut doc, &key, "orange").expect("expected to be able to insert value 'orange'");
         let formatted = format_toml(&item);
-        assert_eq!(
-            formatted,
-            r#"[ "tomato", "plum", "pluot", "kumquat", "persimmon" ]"#
-        );
-        assert!(doc.to_string().contains(
-            r#"fruits = [ "tomato", "plum", "pluot", "kumquat", "persimmon" , "orange"]"#
-        ));
+        assert_eq!(formatted, r#"[ "tomato", "plum", "pluot", "kumquat", "persimmon" ]"#);
+        assert!(doc
+            .to_string()
+            .contains(r#"fruits = [ "tomato", "plum", "pluot", "kumquat", "persimmon" , "orange"]"#));
     }
 
     #[test]
     fn append_to_non_existing_key_creates_array() {
         let toml = include_str!("../fixtures/sample.toml");
-        let mut doc = toml
-            .parse::<Document>()
-            .expect("test doc should be valid toml");
+        let mut doc = toml.parse::<DocumentMut>().expect("test doc should be valid toml");
 
-        let key =
-            Keyspec::from_str("testcases.these.are.not.fruits").expect("test key should be valid");
-        let item = append_value(&mut doc, &key, "leek")
-            .expect("expected to be able to insert value 'leek'");
+        let key = Keyspec::from_str("testcases.these.are.not.fruits").expect("test key should be valid");
+        let item = append_value(&mut doc, &key, "leek").expect("expected to be able to insert value 'leek'");
         assert!(item.is_none());
         assert!(doc
             .to_string()
             .contains(r#"these = { are = { not = { fruits = ["leek"] } } }"#));
 
-        let item = append_value(&mut doc, &key, "artichoke")
-            .expect("expected to be able to insert value 'artichoke'");
+        let item = append_value(&mut doc, &key, "artichoke").expect("expected to be able to insert value 'artichoke'");
         assert_eq!(format_toml(&item), r#"["leek"]"#);
         assert!(doc
             .to_string()
             .contains(r#"these = { are = { not = { fruits = ["leek", "artichoke"] } } }"#));
 
-        let key = Keyspec::from_str("testcases.these.are.maybe.fruits")
-            .expect("test key should be valid");
-        let item = append_value(&mut doc, &key, "banana")
-            .expect("expected to be able to insert value 'banana'");
+        let key = Keyspec::from_str("testcases.these.are.maybe.fruits").expect("test key should be valid");
+        let item = append_value(&mut doc, &key, "banana").expect("expected to be able to insert value 'banana'");
         eprintln!("{}", doc.to_string());
         assert!(item.is_none());
-        assert!(doc
-            .to_string()
-            .contains(r#"these = { are = { not = { fruits = ["leek", "artichoke"] }, maybe = { fruits = ["banana"] } } }"#));
+        assert!(doc.to_string().contains(
+            r#"these = { are = { not = { fruits = ["leek", "artichoke"] }, maybe = { fruits = ["banana"] } } }"#
+        ));
     }
 
     #[test]
     fn yeet() {
         let toml = include_str!("../fixtures/sample.toml");
-        let mut doc = toml
-            .parse::<Document>()
-            .expect("test doc should be valid toml");
+        let mut doc = toml.parse::<DocumentMut>().expect("test doc should be valid toml");
 
-        let key = Keyspec::from_str("testcases.hashes.color").unwrap();
+        let key = Keyspec::from_str("testcases.hashes.color").expect("test key should be valid");
         let item = remove_key(&mut doc, &key).expect("expected to find key 'hashes.color'");
         assert_eq!("brown", format_item(&item, Format::Raw));
         assert!(!doc.to_string().contains("color = \"brown\""));
 
-        let key = Keyspec::from_str("testcases.hashes.mats[1]").unwrap();
-        let item =
-            remove_key(&mut doc, &key).expect("expected to find key testcases.hashes.mats[1]");
+        let key = Keyspec::from_str("testcases.hashes.mats[1]").expect("test key should be valid");
+        let item = remove_key(&mut doc, &key).expect("expected to find key testcases.hashes.mats[1]");
         assert_eq!("salt", format_item(&item, Format::Raw));
-        assert!(doc
-            .to_string()
-            .contains(r#"mats = [ "potatoes", "oil", "frying" ]"#));
+        assert!(doc.to_string().contains(r#"mats = [ "potatoes", "oil", "frying" ]"#));
     }
 
     #[test]
     fn toml_output() {
         let toml = include_str!("../fixtures/sample.toml");
-        let mut doc = toml
-            .parse::<Document>()
-            .expect("test doc should be valid toml");
+        let mut doc = toml.parse::<DocumentMut>().expect("test doc should be valid toml");
 
-        let key = Keyspec::from_str("testcases.hashes.mats").unwrap();
+        let key = Keyspec::from_str("testcases.hashes.mats").expect("test key should be valid");
         let item = get_key(&mut doc, &key).expect("expected to find key testcases.hashes.mats");
         let formatted = format_toml(&item);
         assert_eq!(formatted, r#"[ "potatoes", "salt", "oil", "frying" ]"#);
 
-        let key = Keyspec::from_str("testcases.numbers").unwrap();
+        let key = Keyspec::from_str("testcases.numbers").expect("test key should be valid");
         let item = get_key(&mut doc, &key).expect("expected to find key testcases.numbers");
         let formatted = format_toml(&item);
         assert_eq!(formatted, r#"[1, 3, 5, 7, 11, 13, 17, 23]"#);
 
-        let key = Keyspec::from_str("testcases.hashes.color").unwrap();
+        let key = Keyspec::from_str("testcases.hashes.color").expect("test key should be valid");
         let item = get_key(&mut doc, &key).expect("expected to find key testcases.numbers");
         let formatted = format_toml(&item);
         assert_eq!(formatted, r#""brown""#);
 
-        let key = Keyspec::from_str("testcases.are_passing").unwrap();
+        let key = Keyspec::from_str("testcases.are_passing").expect("test key should be valid");
         let item = get_key(&mut doc, &key).expect("expected to find key testcases.are_passing");
         let formatted = format_toml(&item);
         assert_eq!(formatted, r#"true"#);
 
-        let key = Keyspec::from_str("testcases.are_complete").unwrap();
+        let key = Keyspec::from_str("testcases.are_complete").expect("test key should be valid");
         let item = get_key(&mut doc, &key).expect("expected to find key testcases.are_complete");
         let formatted = format_toml(&item);
         assert_eq!(formatted, r#"false"#);
@@ -668,14 +638,11 @@ mod tests {
     #[test]
     fn can_set_booleans() {
         let toml = include_str!("../fixtures/sample.toml");
-        let mut doc = toml
-            .parse::<Document>()
-            .expect("test doc should be valid toml");
+        let mut doc = toml.parse::<DocumentMut>().expect("test doc should be valid toml");
 
         let key = Keyspec::from_str("testcases.are_passing").expect("test key should be valid");
         let newval = Value::from(false);
-        let previous =
-            set_key(&mut doc, &key, &newval).expect("test fixture known to contain the test key");
+        let previous = set_key(&mut doc, &key, &newval).expect("test fixture known to contain the test key");
         let prevval = previous
             .as_value()
             .expect("the previous value should be a valid toml value");
@@ -687,9 +654,7 @@ mod tests {
         }
 
         let current = get_key(&mut doc, &key).expect("test fixture known to contain the test key");
-        let curval = current
-            .as_value()
-            .expect("the new value should be a valid toml value");
+        let curval = current.as_value().expect("the new value should be a valid toml value");
         match curval {
             Value::Boolean(b) => {
                 assert_eq!(*b.value(), false);

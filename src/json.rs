@@ -16,10 +16,8 @@ pub fn to_json(item: &Item) -> serde_json::Value {
 
 /// Turn a toml_edit::Table structure into a json object
 pub fn table_to_json(table: &toml_edit::Table) -> serde_json::Value {
-    let obj: serde_json::Map<String, serde_json::Value> = table
-        .iter()
-        .map(|(k, v)| (k.to_string(), to_json(v)))
-        .collect();
+    let obj: serde_json::Map<String, serde_json::Value> =
+        table.iter().map(|(k, v)| (k.to_string(), to_json(v))).collect();
     serde_json::Value::Object(obj)
 }
 
@@ -39,8 +37,7 @@ pub fn value_to_json(v: Value) -> serde_json::Value {
         Value::Boolean(b) => serde_json::Value::Bool(b.into_value()),
         Value::Datetime(dt) => serde_json::Value::String(dt.into_value().to_string()),
         Value::Array(array) => {
-            let items: Vec<serde_json::Value> =
-                array.iter().map(|xs| value_to_json(xs.clone())).collect();
+            let items: Vec<serde_json::Value> = array.iter().map(|xs| value_to_json(xs.clone())).collect();
             serde_json::Value::Array(items)
         }
         Value::InlineTable(table) => {
@@ -61,17 +58,17 @@ pub fn format_json(item: &Item) -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
+    use toml_edit::DocumentMut;
+
     use super::*;
     use crate::{get_key, Keyspec};
-    use std::str::FromStr;
-    use toml_edit::Document;
 
     #[test]
     fn json_output() {
         let toml = include_str!("../fixtures/sample.toml");
-        let mut doc = toml
-            .parse::<Document>()
-            .expect("test doc should be valid toml");
+        let mut doc = toml.parse::<DocumentMut>().expect("test doc should be valid toml");
 
         let key = Keyspec::from_str("testcases.hashes.mats").unwrap();
         let item = get_key(&mut doc, &key).expect("expected to find key testcases.hashes.mats");

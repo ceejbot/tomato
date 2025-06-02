@@ -54,17 +54,17 @@ fn format_bash_value(v: Value) -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
+    use toml_edit::DocumentMut;
+
     use super::*;
     use crate::{get_key, Keyspec};
-    use std::str::FromStr;
-    use toml_edit::Document;
 
     #[test]
     fn bash_ouput() {
         let toml = include_str!("../fixtures/sample.toml");
-        let mut doc = toml
-            .parse::<Document>()
-            .expect("test doc should be valid toml");
+        let mut doc = toml.parse::<DocumentMut>().expect("test doc should be valid toml");
 
         let key = Keyspec::from_str("testcases.hashes.mats").unwrap();
         let item = get_key(&mut doc, &key).expect("expected to find key testcases.hashes.mats");
@@ -103,9 +103,7 @@ bashval[fruit]="kumquat"
 bashval[safe_pet]=1
 bashval[class]="Archaeologist""#;
 
-        let mut doc = toml
-            .parse::<Document>()
-            .expect("test string should be valid toml");
+        let mut doc = toml.parse::<DocumentMut>().expect("test string should be valid toml");
 
         let key = Keyspec::from_str("inline_table").unwrap();
         let item = get_key(&mut doc, &key).expect("expected to get key 'inline_table'");

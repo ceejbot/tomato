@@ -1,6 +1,15 @@
-use regex::Regex;
 use std::fmt::Display;
 use std::str::FromStr;
+use std::sync::LazyLock;
+
+use regex::Regex;
+
+use crate::errors::TomatoError;
+
+// Tokens that look like "xxx[yyy]" are array references
+// it's the cheesiest thing in the world to implement this with regex, but I am cheesy
+pub static ARRAY_REGEX: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(\w+)\[(\d+)\]").expect("array regex is expected to compile"));
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 /// Keys can contain either name segments or array indexes.
@@ -43,18 +52,14 @@ impl Display for Keyspec {
 }
 
 impl FromStr for Keyspec {
-    type Err = anyhow::Error;
+    type Err = TomatoError;
 
     fn from_str(input: &str) -> Result<Self, Self::Err> {
         let tokens: Vec<&str> = input.split('.').collect();
         let mut subkeys: Vec<KeySegment> = Vec::with_capacity(tokens.len() * 2);
 
-        // Tokens that look like "xxx[yyy]" are array references
-        // it's the cheesiest thing in the world to implement this with regex, but I am cheesy
-        let arraypatt = Regex::new(r"(\w+)\[(\d+)\]").unwrap();
-
         tokens.iter().try_for_each(|t| {
-            let maybe_captures = arraypatt.captures(t);
+            let maybe_captures = ARRAY_REGEX.captures(t);
             match maybe_captures {
                 None => {
                     if let Ok(idx) = t.parse::<usize>() {
@@ -65,7 +70,7 @@ impl FromStr for Keyspec {
                 }
                 Some(captures) => {
                     if captures.len() != 3 {
-                        anyhow::bail!("{} is not a valid key segment for tomato!", t);
+                        return Err(TomatoError::InvalidKeySegment(t.to_string()));
                     } else {
                         subkeys.push(KeySegment::Name(captures[1].to_string()));
                         subkeys.push(KeySegment::Index(captures[2].parse()?))
