@@ -1,12 +1,17 @@
 name: release
 permissions:
-    "contents": "write"
+    contents: write
 
 on:
     push:
         tags:
             - "v**[0-9]+.[0-9]+.[0-9]+*"
     workflow_dispatch:
+        inputs:
+            ref_name:
+                type: string
+                description: the refname to build a release from
+                default: "latest"
 
 concurrency:
     group: ${{ github.workflow }}-${{ github.ref }}
@@ -16,17 +21,163 @@ env:
     CARGO_TERM_COLOR: always
 
 jobs:
-    release:
-        name: release
-        runs-on: macos-latest
+    preflight:
+        name: preflight
+        runs-on: ubuntu-latest
         steps:
-            - uses: ceejbot/action-rust-releaser@HEAD
-              env:
-                  HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-                  REPO_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            - uses: actions/checkout@v4
+
+            - name: get stable + nightly Rust
+              uses: actions-rust-lang/setup-rust-toolchain@v1
               with:
-                  executable: tomato
-                  refname: ${{ github.ref_name }}
-                  tap_repo: ceejbot/homebrew-tap
-                  tap_email: ceejceej@gmail.com
-                  tap_user: formula robot
+                  toolchain: nightly, stable
+                  target: x86_64-unknown-linux-gnu, aarch64-unknown-linux-gnu
+                  components: clippy, rustfmt
+                  cache-directories: |
+                      ~/.cargo/registry
+                      ~/.cargo/bin
+                      target
+
+            - name: consult Clippy
+              run: cargo +stable clippy --all-targets
+
+            - name: check formatting
+              run: cargo +nightly fmt --check --all
+
+            - name: set ref_name
+              shell: bash
+              run: |
+                  if [ -n "${{ inputs.ref_name }}" ]; then
+                    echo "REF_NAME=${{ inputs.ref_name }}" >> $GITHUB_ENV
+                  else
+                    echo "REF_NAME=${{ github.ref_name }}" >> $GITHUB_ENV
+                  fi
+
+            - name: create github release
+              continue-on-error: true # for testing
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: |
+                  release_url=$(gh release create $REF_NAME --generate-notes)
+
+    release-linux:
+        name: release-linux
+        runs-on: ubuntu-latest
+        needs: preflight
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: get stable Rust
+              uses: actions-rust-lang/setup-rust-toolchain@v1
+              with:
+                  toolchain: stable
+                  cache-directories: |
+                      ~/.cargo/registry
+                      ~/.cargo/bin
+                      target
+
+            - name: build for release and upload
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  GITHUB_ACCESS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: |
+                  REF_NAME="${{ github.ref_name }}"
+                  if [ -n "${{ inputs.ref_name }}" ]; then
+                      REF_NAME="${{ inputs.ref_name }}"
+                  fi
+                  cargo +stable build --release
+                  tar czf tomato-x86_64-unknown-linux-gnu.tar.gz --strip-components=2  target/release/tomato
+                  gh release upload "$REF_NAME" "tomato-x86_64-unknown-linux-gnu.tar.gz"
+
+                  digest=$(shasum -a 256 tomato-x86_64-unknown-linux-gnu.tar.gz)
+                  shasum=$(echo $digest | { read first rest; echo $first; } )
+                  echo $shasum > tomato-"x86_64-unknown-linux-gnu".tar.gz.sha256
+                  gh release upload "$REF_NAME" "tomato-x86_64-unknown-linux-gnu.tar.gz.sha256"
+
+    release-macos:
+        name: release-macos
+        runs-on: macos-latest
+        needs: preflight
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: get stable Rust
+              uses: actions-rust-lang/setup-rust-toolchain@v1
+              with:
+                  toolchain: stable
+                  target: aarch64-apple-darwin, x86_64-apple-darwin
+                  cache-directories: |
+                      ~/.cargo/registry
+                      ~/.cargo/bin
+                      target
+
+            - name: build for release
+              run: |
+                  cargo +stable build --release --target aarch64-apple-darwin
+                  cargo +stable build --release --target x86_64-apple-darwin
+
+            - name: upload release assets
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: |
+                  REF_NAME="${{ github.ref_name }}"
+                  if [ -n "${{ inputs.ref_name }}" ]; then
+                      REF_NAME="${{ inputs.ref_name }}"
+                  fi
+                  mkdir -p dist
+                  cd dist
+                  for target in "aarch64-apple-darwin" "x86_64-apple-darwin"; do
+                      tar czf tomato-$target.tar.gz --strip-components=4  ../target/$target/release/tomato
+                      gh release upload "$REF_NAME" "tomato-$target.tar.gz"
+
+                      digest=$(shasum -a 256 tomato-$target.tar.gz)
+                      shasum=$(echo $digest | { read first rest; echo $first; } )
+                      echo $shasum > tomato-"$target".tar.gz.sha256
+                      gh release upload "$REF_NAME" "tomato-$target.tar.gz.sha256"
+                  done
+
+    postflight:
+        name: postflight
+        runs-on: ubuntu-latest
+        needs:
+            - release-linux
+            - release-macos
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: get formulaic on path
+              shell: bash
+              run: |
+                  curl -sLo formulaic.tgz https://github.com/ceejbot/formulaic/releases/latest/download/formulaic-x86_64-unknown-linux-gnu.tar.gz
+                  tar --strip-components=3 -xf formulaic.tgz target/x86_64-unknown-linux-gnu/release/formulaic
+
+            - name: set ref_name
+              shell: bash
+              run: |
+                  if [ -n "${{ inputs.ref_name }}" ]; then
+                    echo "REF_NAME=${{ inputs.ref_name }}" >> $GITHUB_ENV
+                  else
+                    echo "REF_NAME=${{ github.ref_name }}" >> $GITHUB_ENV
+                  fi
+
+            - name: publish the draft release
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              shell: bash
+              run: gh release edit "$REF_NAME" --draft=false
+
+            - name: update the homebrew tap
+              env:
+                  GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+                  GITHUB_ACCESS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              shell: bash
+              run: |
+                  formula_file=$(./formulaic -g ./Cargo.toml)
+                  gh repo clone ceejbot/homebrew-tap
+                  cd homebrew-tap || exit 1
+                  cp "../$formula_file" Formula/
+                  git add Formula/"$formula_file"
+                  git config user.name "formula robot"
+                  git config user.email "ceejceej@gmail.com"
+                  git commit -m "tomato $REF_NAME"
+                  git push https://x-access-token:${{ secrets.HOMEBREW_TAP_TOKEN }}@github.com/ceejbot/homebrew-tap.git
