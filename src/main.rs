@@ -503,7 +503,7 @@ mod tests {
 
         let key = Keyspec::from_str("testcases.these.are.maybe.fruits").expect("test key should be valid");
         let item = append_value(&mut doc, &key, "banana").expect("expected to be able to insert value 'banana'");
-        eprintln!("{}", doc.to_string());
+        eprintln!("{doc}");
         assert!(item.is_none());
         assert!(doc.to_string().contains(
             r#"these = { are = { not = { fruits = ["leek", "artichoke"] }, maybe = { fruits = ["banana"] } } }"#
@@ -567,7 +567,7 @@ mod tests {
             }
             _ => {
                 eprintln!("{:?}", tval.inner);
-                assert!(false, "should have been a string");
+                unreachable!("should have been a string");
             }
         }
 
@@ -579,7 +579,7 @@ mod tests {
             }
             _ => {
                 eprintln!("{:?}", tval.inner);
-                assert!(false, "should have been a string");
+                unreachable!("should have been a string");
             }
         }
 
@@ -587,11 +587,11 @@ mod tests {
         let tval2 = TomlVal::from_str(unquoted).expect("conversion should work");
         match tval2.inner {
             Value::Boolean(b) => {
-                assert_eq!(*b.value(), false);
+                assert!(!*b.value());
             }
             _ => {
                 eprintln!("{:?}", tval2.inner);
-                assert!(false, "should have been a boolean");
+                unreachable!("should have been a boolean");
             }
         }
     }
@@ -606,7 +606,7 @@ mod tests {
             }
             _ => {
                 eprintln!("{:?}", tval.inner);
-                assert!(false, "should have been a string");
+                unreachable!("should have been a string");
             }
         }
 
@@ -618,7 +618,7 @@ mod tests {
             }
             _ => {
                 eprintln!("{:?}", tval2.inner);
-                assert!(false, "should have been an integer");
+                unreachable!("should have been an integer");
             }
         }
 
@@ -630,7 +630,7 @@ mod tests {
             }
             _ => {
                 eprintln!("{:?}", floatyval.inner);
-                assert!(false, "should have been an integer");
+                unreachable!("should have been an integer");
             }
         }
     }
@@ -657,7 +657,7 @@ mod tests {
         let curval = current.as_value().expect("the new value should be a valid toml value");
         match curval {
             Value::Boolean(b) => {
-                assert_eq!(*b.value(), false);
+                assert!(!*b.value());
             }
             _ => panic!("fetched value was supposed to be a boolean!"),
         }

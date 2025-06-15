@@ -70,32 +70,32 @@ mod tests {
         let toml = include_str!("../fixtures/sample.toml");
         let mut doc = toml.parse::<DocumentMut>().expect("test doc should be valid toml");
 
-        let key = Keyspec::from_str("testcases.hashes.mats").unwrap();
+        let key = Keyspec::from_str("testcases.hashes.mats").expect("json_output() test keyspec should be good");
         let item = get_key(&mut doc, &key).expect("expected to find key testcases.hashes.mats");
         let formatted = format_json(&item);
         assert_eq!(formatted, r#"["potatoes","salt","oil","frying"]"#);
 
-        let key = Keyspec::from_str("testcases.numbers").unwrap();
+        let key = Keyspec::from_str("testcases.numbers").expect("json_output() test keyspec should be good");
         let item = get_key(&mut doc, &key).expect("expected to find key testcases.numbers");
         let formatted = format_json(&item);
         assert_eq!(formatted, r#"[1,3,5,7,11,13,17,23]"#);
 
-        let key = Keyspec::from_str("testcases.hashes.color").unwrap();
+        let key = Keyspec::from_str("testcases.hashes.color").expect("json_output() test keyspec should be good");
         let item = get_key(&mut doc, &key).expect("expected to find key testcases.numbers");
         let formatted = format_json(&item);
         assert_eq!(formatted, r#""brown""#);
 
-        let key = Keyspec::from_str("testcases.are_passing").unwrap();
+        let key = Keyspec::from_str("testcases.are_passing").expect("json_output() test keyspec should be good");
         let item = get_key(&mut doc, &key).expect("expected to find key testcases.are_passing");
         let formatted = format_json(&item);
         assert_eq!(formatted, r#"true"#);
 
-        let key = Keyspec::from_str("testcases.are_complete").unwrap();
+        let key = Keyspec::from_str("testcases.are_complete").expect("json_output() test keyspec should be good");
         let item = get_key(&mut doc, &key).expect("expected to find key testcases.are_complete");
         let formatted = format_json(&item);
         assert_eq!(formatted, r#"false"#);
 
-        let key = Keyspec::from_str("nested").unwrap();
+        let key = Keyspec::from_str("nested").expect("json_output() test keyspec should be good");
         let item = get_key(&mut doc, &key).expect("expected to find key nested");
         let formatted = format_json(&item);
         assert_eq!(formatted, r#"[{"entry":"one"},{"entry":"two"}]"#);

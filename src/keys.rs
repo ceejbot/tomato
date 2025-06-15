@@ -90,34 +90,34 @@ mod tests {
 
     #[test]
     fn key_parsing_easy() {
-        let mut key = Keyspec::from_str("a").unwrap();
+        let mut key = Keyspec::from_str("a").expect("test keyspect expected to be valid");
         assert!(key.subkeys.len() == 1);
         assert_eq!(key.subkeys[0], KeySegment::Name("a".to_string()));
 
-        key = Keyspec::from_str("a.b.c").unwrap();
+        key = Keyspec::from_str("a.b.c").expect("test keyspect expected to be valid");
         assert!(key.subkeys.len() == 3);
         assert_eq!(key.subkeys[2], KeySegment::Name("c".to_string()));
     }
 
     #[test]
     fn key_parsing_arrays() {
-        let mut key = Keyspec::from_str("a[1]").unwrap();
+        let mut key = Keyspec::from_str("a[1]").expect("test keyspect expected to be valid");
         assert!(key.subkeys.len() == 2);
         assert_eq!(key.subkeys[0], KeySegment::Name("a".to_string()));
         assert_eq!(key.subkeys[1], KeySegment::Index(1));
 
-        key = Keyspec::from_str("a[1].b[2]").unwrap();
+        key = Keyspec::from_str("a[1].b[2]").expect("test keyspect expected to be valid");
         assert!(key.subkeys.len() == 4);
         assert_eq!(key.subkeys[2], KeySegment::Name("b".to_string()));
         assert_eq!(key.subkeys[3], KeySegment::Index(2));
 
-        key = Keyspec::from_str("a[1].b.c[3]").unwrap();
+        key = Keyspec::from_str("a[1].b.c[3]").expect("test keyspect expected to be valid");
         assert!(key.subkeys.len() == 5);
         assert_eq!(key.subkeys[2], KeySegment::Name("b".to_string()));
         assert_eq!(key.subkeys[3], KeySegment::Name("c".to_string()));
         assert_eq!(key.subkeys[4], KeySegment::Index(3));
 
-        let identical = Keyspec::from_str("a.1.b.c.3").unwrap();
+        let identical = Keyspec::from_str("a.1.b.c.3").expect("test keyspect expected to be valid");
         assert!(identical.subkeys.len() == 5);
         assert_eq!(identical.subkeys[2], KeySegment::Name("b".to_string()));
         assert_eq!(identical.subkeys[3], KeySegment::Name("c".to_string()));
