@@ -172,7 +172,7 @@ jobs:
                   GITHUB_ACCESS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
               shell: bash
               run: |
-                  formula_file=$(./formulaic -g ./Cargo.toml)
+                  formula_file=$(./formulaic ./Cargo.toml)
                   gh repo clone ceejbot/homebrew-tap
                   cd homebrew-tap || exit 1
                   cp "../$formula_file" Formula/
