@@ -8,15 +8,17 @@ _help:
 test:
 	cargo nextest run
 
-# Run the same checks we run in CI. Requires nightly.
-ci: test
-	cargo clippy
+# Format the code.
+fmt:
 	cargo +nightly fmt
 
+# Run the same checks we run in CI. Requires nightly.
+ci: test fmt
+	cargo clippy --all-targets
+
 # Ask for clippy's opinion.
-lint:
+lint: fmt
 	cargo clippy --fix
-	cargo +nightly fmt
 
 # Install required tools
 setup:

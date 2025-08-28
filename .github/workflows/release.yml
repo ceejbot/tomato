@@ -89,11 +89,6 @@ jobs:
                   tar czf tomato-x86_64-unknown-linux-gnu.tar.gz --strip-components=2  target/release/tomato
                   gh release upload "$REF_NAME" "tomato-x86_64-unknown-linux-gnu.tar.gz"
 
-                  digest=$(shasum -a 256 tomato-x86_64-unknown-linux-gnu.tar.gz)
-                  shasum=$(echo $digest | { read first rest; echo $first; } )
-                  echo $shasum > tomato-"x86_64-unknown-linux-gnu".tar.gz.sha256
-                  gh release upload "$REF_NAME" "tomato-x86_64-unknown-linux-gnu.tar.gz.sha256"
-
     release-macos:
         name: release-macos
         runs-on: macos-latest
@@ -129,11 +124,6 @@ jobs:
                   for target in "aarch64-apple-darwin" "x86_64-apple-darwin"; do
                       tar czf tomato-$target.tar.gz --strip-components=4  ../target/$target/release/tomato
                       gh release upload "$REF_NAME" "tomato-$target.tar.gz"
-
-                      digest=$(shasum -a 256 tomato-$target.tar.gz)
-                      shasum=$(echo $digest | { read first rest; echo $first; } )
-                      echo $shasum > tomato-"$target".tar.gz.sha256
-                      gh release upload "$REF_NAME" "tomato-$target.tar.gz.sha256"
                   done
 
     postflight:
@@ -149,7 +139,7 @@ jobs:
               shell: bash
               run: |
                   curl -sLo formulaic.tgz https://github.com/ceejbot/formulaic/releases/latest/download/formulaic-x86_64-unknown-linux-gnu.tar.gz
-                  tar --strip-components=3 -xf formulaic.tgz target/x86_64-unknown-linux-gnu/release/formulaic
+                  tar --strip-components=3 -xf formulaic.tgz ./target/release/formulaic
 
             - name: set ref_name
               shell: bash
