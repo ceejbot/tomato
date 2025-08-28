@@ -192,6 +192,13 @@ toml
 ➜ tomato get package.keywords[-1] Cargo.toml
 bash
 
+# miette provides helpful error reports
+➜ tomato get package.keywords[20] Cargo.toml
+Error: tomato::array_bounds
+
+  × Array index 20 is out of bounds
+  help: The array has 4 elements. Valid indices are 0 to 3 (or negative indices from -1 to -4)
+
 # Keys that don't exist return proper errors
 ➜ tomato get package.nonexistent Cargo.toml
 Error: Key 'package.nonexistent' not found in TOML file
