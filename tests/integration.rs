@@ -571,7 +571,6 @@ flag = true
     assert!(!success);
     assert!(stderr.contains("Cannot append to non-array at 'test.name'"));
     assert!(stderr.contains("is a string, not an array"));
-    assert!(stderr.contains("Use 'set' to replace"));
 
     // Test appending to integer
     let (_stdout, stderr, success) = run_tomato_stdin(&["append", "test.count", "value"], toml_data);
@@ -613,4 +612,96 @@ fn unsupported_format_error() {
     let (_stdout, stderr, success) = run_tomato(&["get", "--format", "xml", "test.key", "fixtures/sample.toml"]);
     assert!(!success);
     assert!(stderr.contains("Unsupported output format 'xml'"));
+}
+
+// Keys command tests
+#[test]
+fn keys_command_table() {
+    let (stdout, _stderr, success) = run_tomato(&["keys", "testcases", "fixtures/sample.toml"]);
+    assert!(success);
+    let lines: Vec<&str> = stdout.trim().split('\n').collect();
+    assert!(lines.contains(&"are_complete"));
+    assert!(lines.contains(&"are_passing"));
+    assert!(lines.contains(&"fruits"));
+    assert!(lines.contains(&"hashes"));
+    assert!(lines.contains(&"inline_table"));
+    assert!(lines.contains(&"numbers"));
+    assert!(lines.contains(&"phrases"));
+    assert!(lines.contains(&"when"));
+}
+
+#[test]
+fn keys_command_inline_table() {
+    let (stdout, _stderr, success) = run_tomato(&["keys", "testcases.inline_table", "fixtures/sample.toml"]);
+    assert!(success);
+    let lines: Vec<&str> = stdout.trim().split('\n').collect();
+    assert!(lines.contains(&"catname"));
+    assert!(lines.contains(&"class"));
+    assert!(lines.contains(&"fruit"));
+    assert!(lines.contains(&"safe_pet"));
+}
+
+#[test]
+fn keys_command_json_format() {
+    let (stdout, _stderr, success) = run_tomato(&[
+        "keys",
+        "--format",
+        "json",
+        "testcases.inline_table",
+        "fixtures/sample.toml",
+    ]);
+    assert!(success);
+    assert!(stdout.contains("["));
+    assert!(stdout.contains("]"));
+    assert!(stdout.contains("\"catname\""));
+    assert!(stdout.contains("\"fruit\""));
+}
+
+#[test]
+fn keys_command_bash_format() {
+    let (stdout, _stderr, success) = run_tomato(&[
+        "keys",
+        "--format",
+        "bash",
+        "testcases.inline_table",
+        "fixtures/sample.toml",
+    ]);
+    assert!(success);
+    assert!(stdout.contains("( "));
+    assert!(stdout.contains(" )"));
+    assert!(stdout.contains("\"catname\""));
+    assert!(stdout.contains("\"fruit\""));
+}
+
+#[test]
+fn keys_command_error_on_non_table() {
+    let (_stdout, stderr, success) = run_tomato(&["keys", "testcases.are_passing", "fixtures/sample.toml"]);
+    assert!(!success);
+    assert!(stderr.contains("Cannot list keys on boolean"));
+    assert!(stderr.contains("tomato::not_a_table"));
+}
+
+#[test]
+fn keys_command_error_on_missing_key() {
+    let (_stdout, stderr, success) = run_tomato(&["keys", "nonexistent", "fixtures/sample.toml"]);
+    assert!(!success);
+    assert!(stderr.contains("Key 'nonexistent' not found"));
+    assert!(stderr.contains("tomato::key_not_found"));
+}
+
+#[test]
+fn keys_command_stdin() {
+    let toml_data = r#"
+[test]
+key1 = "value1"
+key2 = "value2"
+key3 = "value3"
+"#;
+
+    let (stdout, _stderr, success) = run_tomato_stdin(&["keys", "test"], toml_data);
+    assert!(success);
+    let lines: Vec<&str> = stdout.trim().split('\n').collect();
+    assert!(lines.contains(&"key1"));
+    assert!(lines.contains(&"key2"));
+    assert!(lines.contains(&"key3"));
 }

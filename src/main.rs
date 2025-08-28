@@ -17,7 +17,7 @@ mod parser;
 // Use the new parser's types
 use parser::{resolve_negative_index, KeySegment, Keyspec};
 mod errors;
-use errors::TomatoError;
+use errors::{DisplayInfo, TomatoError};
 
 #[derive(Parser, Debug)]
 #[clap(name = "🍅 tomato", version, styles = v3_styles(), max_term_width=100)]
@@ -84,15 +84,30 @@ pub enum Command {
     /// Append the given value to an array, returning the previous array if one existed.
     #[clap(display_order = 4)]
     Append {
-        /// The key to look for. Use dots as path separators. Must
+        /// The full key path of the array you want to append to.
         key: Keyspec,
-        /// The new value.
+        /// The value to append to the array.
         value: String,
+        /// The toml file to modify. Omit to read from stdin.
+        file: Option<String>,
+    },
+    /// Exits with 0 status code if the key exists in the input file, non-zero if not.
+    #[clap(display_order = 5)]
+    Exists {
+        /// The key to check the existence of.
+        key: Keyspec,
+        /// The toml file to read from. Omit to read from stdin.
+        file: Option<String>,
+    },
+    /// List all keys at a given path.
+    #[clap(display_order = 6)]
+    Keys {
+        /// The key to list subkeys for.
+        key: Keyspec,
         /// The toml file to read from. Omit to read from stdin.
         file: Option<String>,
     },
     /// Generate completions for the named shell.
-    #[clap(display_order = 5)]
     Completions {
         #[clap(value_enum)]
         shell: Shell,
@@ -211,31 +226,18 @@ pub fn get_in_node<'a>(key: &'a KeySegment, node: &'a mut Item) -> Result<Option
                 }
             } else {
                 // Cannot index into non-array types
-                let info = node_type_info(node);
+                let (_, value_type) = node_type_info(node);
                 Err(TomatoError::CannotIndexIntoNonArray {
                     key: format!("[{}]", idx),
-                    actual_type: info.1.to_string(),
+                    value_type,
                 })
             }
         }
     }
 }
 
-fn node_type_info(node: &Item) -> (bool, &str) {
-    match node {
-        Item::Value(v) => match v {
-            Value::InlineTable(_) => (false, "inline table"),
-            Value::String(_) => (true, "string"),
-            Value::Integer(_) => (true, "integer"),
-            Value::Float(_) => (true, "float"),
-            Value::Boolean(_) => (true, "boolean"),
-            Value::Datetime(_) => (true, "date-time"),
-            Value::Array(_) => (true, "array"),
-        },
-        Item::Table(_) => (false, "table"),
-        Item::ArrayOfTables(_) => (false, "array of tables"),
-        Item::None => (false, "null"),
-    }
+fn node_type_info(node: &Item) -> (bool, String) {
+    (node.is_primitive(), node.type_str().to_string())
 }
 
 /// Helper function to traverse a key path and handle common error cases
@@ -249,8 +251,7 @@ fn traverse_key_path<'a>(
 
     for k in key_path {
         // Get type information before the mutable borrow
-        let (is_primitive, type_str) = node_type_info(node);
-        let actual_type = type_str.to_string();
+        let (is_primitive, value_type) = node_type_info(node);
 
         let found = match get_in_node(k, node)? {
             Some(found) => found,
@@ -260,7 +261,7 @@ fn traverse_key_path<'a>(
                     if is_primitive {
                         return Err(TomatoError::PropertyOnPrimitive {
                             property: name.clone(),
-                            actual_type,
+                            value_type,
                         });
                     }
                 }
@@ -315,8 +316,7 @@ pub fn remove_key(toml: &mut DocumentMut, dotted_key: &Keyspec) -> Result<Item, 
     };
 
     // Check the final key
-    let (is_primitive, type_str) = node_type_info(node);
-    let actual_type = type_str.to_string();
+    let (is_primitive, value_type) = node_type_info(node);
 
     if let Some(found) = get_in_node(&target, node)? {
         let original = found.clone();
@@ -330,7 +330,7 @@ pub fn remove_key(toml: &mut DocumentMut, dotted_key: &Keyspec) -> Result<Item, 
             // Trying to remove a property from a primitive is an error
             return Err(TomatoError::PropertyOnPrimitive {
                 property: name.clone(),
-                actual_type,
+                value_type,
             });
         }
     }
@@ -370,18 +370,41 @@ pub fn append_value(toml: &mut DocumentMut, dotted_key: &Keyspec, value: &str) -
     let original = node.clone();
 
     // Get type info before mutable operations using consistent helper
-    let (_, type_str) = node_type_info(&original);
-    let node_type = type_str.to_string();
+    let (_, value_type) = node_type_info(&original);
 
     node.or_insert(Item::Value(Value::Array(toml_edit::Array::new())))
         .as_array_mut()
         .ok_or_else(|| TomatoError::CannotAppendToNonArray {
             key: dotted_key.to_string(),
-            actual_type: node_type,
+            value_type,
         })?
         .push(value);
 
     Ok(original)
+}
+
+/// Extract keys from a TOML item if it's a table or inline table
+/// Returns an error if the item is not a table type
+pub fn list_keys(item: &Item, key_path: &Keyspec) -> Result<Vec<String>, TomatoError> {
+    match item {
+        Item::Table(table) => {
+            let mut keys: Vec<String> = table.iter().map(|(k, _)| k.to_string()).collect();
+            keys.sort();
+            Ok(keys)
+        }
+        Item::Value(Value::InlineTable(inline_table)) => {
+            let mut keys: Vec<String> = inline_table.iter().map(|(k, _)| k.to_string()).collect();
+            keys.sort();
+            Ok(keys)
+        }
+        _ => {
+            let (_, value_type) = node_type_info(item);
+            Err(TomatoError::CannotListKeysOnNonTable {
+                key: key_path.to_string(),
+                value_type,
+            })
+        }
+    }
 }
 
 /// Format the given toml_edit item for the desired kind of output.
@@ -391,6 +414,29 @@ pub fn format_item(item: &Item, output: Format) -> String {
         Format::Bash => format_bash(item),
         Format::Json => format_json(item),
         Format::Toml => format_toml(item),
+    }
+}
+
+/// Format a list of keys according to the output format
+pub fn format_keys(keys: &[String], output: Format) -> String {
+    match output {
+        Format::Raw => keys.join("\n"),
+        Format::Json => {
+            // Create a TOML array and use the existing json formatter
+            let toml_keys: Vec<toml_edit::Value> = keys.iter().map(|k| toml_edit::Value::from(k.as_str())).collect();
+            let array = toml_edit::Array::from_iter(toml_keys);
+            let item = Item::Value(Value::Array(array));
+            format_json(&item)
+        }
+        Format::Bash => {
+            let quoted_keys: Vec<String> = keys.iter().map(|k| format!("\"{}\"", k)).collect();
+            format!("( {} )", quoted_keys.join(" "))
+        }
+        Format::Toml => {
+            let toml_keys: Vec<toml_edit::Value> = keys.iter().map(|k| toml_edit::Value::from(k.as_str())).collect();
+            let array = toml_edit::Array::from_iter(toml_keys);
+            array.to_string().trim().to_string()
+        }
     }
 }
 
@@ -498,6 +544,31 @@ fn main() -> miette::Result<()> {
                     println!("{}", format_item(&original, args.format));
                 }
             }
+        }
+        Command::Exists { key, file } => {
+            let mut toml = parse_file(file.as_ref())?;
+            match get_key(&mut toml, &key) {
+                Ok(_) => {} // found, fall through and exit with Ok below
+                Err(e) => {
+                    match e {
+                        // For key not found errors, we exit quietly with a non-zero exit code,
+                        // bypassing miette's processing.
+                        TomatoError::KeyNotFound { .. } => {
+                            std::process::exit(1);
+                        }
+                        // For all other errors, we print the same error report as usual.
+                        _ => {
+                            Err(e)?;
+                        }
+                    }
+                }
+            }
+        }
+        Command::Keys { key, file } => {
+            let mut toml = parse_file(file.as_ref())?;
+            let parent = get_key(&mut toml, &key)?;
+            let keys = list_keys(&parent, &key)?;
+            println!("{}", format_keys(&keys, args.format));
         }
         Command::Completions { shell } => {
             use clap::CommandFactory;
