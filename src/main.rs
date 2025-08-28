@@ -91,7 +91,7 @@ pub enum Command {
         /// The toml file to modify. Omit to read from stdin.
         file: Option<String>,
     },
-    /// Exits with 0 status code if the key exists in the input file, non-zero if not.
+    /// Exit with status code zero if the key exists in the input file, non-zero if not.
     #[clap(display_order = 5)]
     Exists {
         /// The key to check the existence of.
@@ -99,7 +99,7 @@ pub enum Command {
         /// The toml file to read from. Omit to read from stdin.
         file: Option<String>,
     },
-    /// List all keys at a given path.
+    /// List all keys at a given path, if the value type has sub-keys.
     #[clap(display_order = 6)]
     Keys {
         /// The key to list subkeys for.
@@ -583,6 +583,12 @@ fn main() -> miette::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn verify_cli() {
+        use clap::CommandFactory;
+        Args::command().debug_assert();
+    }
 
     #[test]
     fn get() {

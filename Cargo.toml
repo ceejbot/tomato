@@ -7,7 +7,7 @@ description = "🍅 A command-line tool to get and set values in toml files whil
 readme = "README.md"
 license = "BlueOak-1.0.0"
 categories = ["command-line-utilities"]
-keywords = ["cli", "toml", "bash"]
+keywords = ["cli", "toml", "bash", "shell"]
 repository = "https://github.com/ceejbot/tomato"
 homepage = "https://github.com/ceejbot/tomato"
 

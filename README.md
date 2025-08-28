@@ -3,35 +3,21 @@
 [![Test the tomato](https://github.com/ceejbot/tomato/actions/workflows/test.yaml/badge.svg)](https://github.com/ceejbot/tomato/actions/workflows/test.yaml)
 ![Crates.io](https://img.shields.io/crates/v/tomato-toml)
 
-Get, set, and delete values in TOML files while preserving comments and formatting.
+Get, set, delete, and inspect values in TOML files while preserving comments and formatting.
 
-That's it. That's the feature set. I wrote `tomato` to satisfy my own primary use
-case, which is to read values of various types from a TOML preferences file,
-process those values in bash tooling, and infrequently update those values from
-other bash scripts.
+I wrote `tomato` to satisfy my own primary use case, which is to read values of various types from a TOML preferences file, process those values in bash tooling, and infrequently update those values from other bash scripts.
 
-To install:
+You can install from the latest release here, using `cargo install tomato-toml`, or using homebrew like this for Mac and Linux:
 
 ```shell
 # using homebrew:
 brew tap ceejbot/tap
 brew install tomato
-
-# if you have Rust installed and prefer to build from source:
-cargo install tomato-toml
-
-# once installed:
-tomato --help
 ```
 
-Or snag a pre-built executable from [the releases](https://github.com/ceejbot/tomato/releases/latest).
+An alternative tool would be [dasel](https://daseldocs.tomwright.me), if you don't need to preserve comments and formatting when you modify a value. `dasel` also supports a large variety of file formats.
 
-An alternative tool would be [dasel](https://daseldocs.tomwright.me), if you
-don't need to preserve comments and formatting when you modify a value. `dasel`
-also supports a large variety of file formats.
-
-If you need to convert among JSON, YAML, and TOML, check out
-[jyt](https://github.com/ken-matsui/jyt).
+If you need to convert among JSON, YAML, and TOML, check out [jyt](https://github.com/ken-matsui/jyt).
 
 ## Usage
 
@@ -40,20 +26,17 @@ The short version:
 * Get a key: `tomato get <dotted.key> <file>`
 * Set a key: `tomato set <dotted.key> <value> <file>`
 * Delete a key: `tomato rm <dotted.key> <file>` (with lots of aliases for `rm`)
+* Append to array: `tomato append <dotted.key> <value> <file>`
+* Check if key exists: `tomato exists <dotted.key> <file>` (exit codes for shell scripts)
+* List keys: `tomato keys <dotted.key> <file>`
 
-The `set` and `rm` subcommands modify the input file in place. Thanks to the magic of
-[toml_edit](https://lib.rs/crates/toml_edit), they do so without disturbing whitespace
-and comments.
+The `set`, `rm`, and `append` subcommands modify the input file in place. Thanks to the magic of [toml_edit](https://lib.rs/crates/toml_edit), they do so without disturbing whitespace and comments.
 
-By default tomato emits data a form suitable for immediate use in bash scripts.
-Strings are unquoted, for instance. The `bash` format generates output suitable
-for `eval` inside bash. Use this for arrays and associative arrays. If you need
-to consume more complex output, you might select `json` format and pipe the
-results to `jq`. And of course if you need TOML, use `toml`.
+By default tomato emits data a form suitable for immediate use in bash scripts. Strings are unquoted, for instance. The `bash` format generates output suitable for `eval` inside bash. Use this for arrays and associative arrays. If you need to consume more complex output, you might select `json` format and pipe the results to `jq`. And of course if you need TOML, use `toml`.
 
 ## Keys
 
-What is this dotted key notation, you ask? Sort of jq-ish, but more toml. Specifically:
+What is this dotted key notation, you ask? Sort of jq-ish, but more TOML. Specifically:
 
 - All valid TOML keys are valid `tomato` keys.
 - TOML keys may be either bare, quoted, or dotted. (Though shell quoting rules still apply.)
@@ -67,60 +50,52 @@ What is this dotted key notation, you ask? Sort of jq-ish, but more toml. Specif
 - `tomato` supports indexing into arrays; indexing is 0-based.
 - Negative number indexes count from the end of an array, with -1 being the last element.
 
+### Output formats
 
-## Cli usage
+What is this 'bash' output format, you ask? It's my best take on making TOML structures usable in bash scripts. It can be evaluated directly in bash to create native bash data structures:
 
-```text
-🍅 tomato 0.2.0
-A command-line tool to get and set values in toml files while preserving comments and formatting.
+**Arrays** are formatted as bash array syntax:
+```bash
+# TOML: fruits = ["apple", "banana", "cherry"]
+$ tomato --format bash get fruits config.toml
+( "apple" "banana" "cherry" )
 
-Keys are written using `.` to separate path segments. You can use `array[idx]` syntax to index into
-arrays if you want to. For example, to get the name of the current crate you're working on, you'd
-run `tomato get Cargo.toml package.name`.
-
-By default tomato emits data in a form suitable for immediate use in bash scripts if they are
-primitive values: strings are unquoted, for instance. If you want to use more complex data types,
-consider one of the other output formats.
-
-To read from stdin instead of a file, omit the file from the arguments. Operating on stdin changes
-the behavior of set and rm somewhat, under the assumption that you are using this tool in a shell
-script. If you read from stdin, normal output (the old value) is suppressed. Instead the modified
-file is written to stdout in json if you requested json, toml otherwise. The 'bash' format option is
-ignored.
-
-USAGE:
-	tomato [OPTIONS] <SUBCOMMAND>
-
-OPTIONS:
-	-b, --backup
-			Back up the file to <filepath>.bak if we write a new version. This option is ignored
-			when we're operating on stdin
-
-	-f, --format <FORMAT>
-			How to format the output: json, toml, bash, or raw
-			[default: raw]
-
-	-h, --help
-			Print help information
-
-	-V, --version
-			Print version information
-
-SUBCOMMANDS:
-get          Get the value of a key from the given file
-set          Set a key to the given value, returning the previous value if one existed
-rm           Delete a key from the given file, returning the previous value if one existed
-append       Append the given value to an array, returning the previous array if one existed
-completions  Generate completions for the named shell
-help         Print this message or the help of the given subcommand(s)
+# Use in bash:
+evaluation=$(tomato --format bash get fruits config.toml)
+eval "my_array=$evaluation"
+for item in "${my_array[@]}"; do
+    echo "Fruit: $item"
+done
 ```
 
-`get` and `rm` both print empty string to stdout if the target key is not found. `set`
-exits with a non-zero status with a message printed to stderr if the target key is not found.
+**Inline tables** become bash associative arrays:
+```bash
+# TOML: person = { name = "Alice", age = 30, active = true }
+$ tomato --format bash get person config.toml
+declare -A bashval
+bashval[name]="Alice"
+bashval[age]=30
+bashval[active]=1
 
-## Setting booleans and numbers
+# Use in bash:
+eval "$(tomato --format bash get person config.toml)"
+echo "Name: ${bashval[name]}, Age: ${bashval[age]}"
+```
 
-Tomato treats booleans and numbers slightly differently than ordinary values in its `set` command. It's likely that you'll need to set both true-the-boolean and "true"-the-string as values at some point. To distinguish `true` the boolean from `"true"` the string on the command line, use quotes around the string and do not use them around the boolean. Remember that your shell strips the first layer of quoting, so you need to use two layers! That is, use `'"true"'` to get a string, and `true` to get a boolean.
+**Key lists** (from `keys` command) use the same array format:
+```bash
+$ tomato --format bash keys person config.toml
+( "age" "active" "name" )
+```
+
+- The associative array is always named `bashval` for consistency.
+- Booleans are expressed as `1` or `0`.
+- Strings are quoted to handle spaces and special characters.
+- For complex nested structures, you should fall back to JSON format and pipe to jq. Sometimes bash just can't do it. Don't tell it I said so.
+
+### Setting booleans and numbers
+
+`tomato` treats booleans and numbers slightly differently than ordinary values in its `set` command. It's likely that you'll need to set both true-the-boolean and "true"-the-string as values at some point. To distinguish `true` the boolean from `"true"` the string on the command line, use quotes around the string and do not use them around the boolean. Remember that your shell strips the first layer of quoting, so you need to use two layers! That is, use `'"true"'` to get a string, and `true` to get a boolean.
 
 Here are examples that work with the test fixture:
 
@@ -142,6 +117,58 @@ true
 ➜ tomato -f toml get testcases.are_complete fixtures/sample.toml
 "20"
 ```
+
+### `stdin` and `stdout`
+
+## Cli usage
+
+`tomato --help` gets you full help. `tomato [command] --help` gets help for any specific command. Here's the help text, for reference if you're deciding if this tool is useful to you or not.
+
+```text
+A command-line tool to get and set values in toml files while preserving comments and formatting.
+
+Keys are written using `.` to separate path segments. You can use `array[idx]` syntax to index into
+arrays if you want to. For example, to get the name of the current crate you're working on, you'd
+run `tomato get Cargo.toml package.name`.
+
+By default tomato emits data in a form suitable for immediate use in bash scripts if they are
+primitive values: strings are unquoted, for instance. If you want to use more complex data types,
+consider one of the other output formats.
+
+To read from stdin instead of a file, omit the file argument. Operating on stdin changes the
+behavior of set and rm somewhat, under the assumption that you are using this tool in a shell
+script. If you read from stdin, normal output (the old value) is suppressed. Instead the modified
+file is written to stdout in json if you requested json, toml otherwise. The 'bash' format option is
+ignored.
+
+Usage: tomato [OPTIONS] <COMMAND>
+
+Commands:
+  get          Get the value of a key from the given file
+  set          Set a key to the given value, returning the previous value if one existed
+  rm           Delete a key from the given file, returning the previous value if one existed
+  append       Append the given value to an array, returning the previous array if one existed
+  exists       Exits with 0 status code if the key exists in the input file, non-zero if not
+  keys         List all keys at a given path
+  completions  Generate completions for the named shell
+  help         Print this message or the help of the given subcommand(s)
+
+Options:
+  -f, --format <FORMAT>
+          How to format the output: json, toml, bash, or raw
+          [default: raw]
+
+  -b, --backup
+          Back up the file to <filepath>.bak if we write a new version. This option is ignored when
+          we're operating on stdin
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+  -V, --version
+          Print version
+```
+
 
 ## Examples
 
@@ -165,11 +192,30 @@ toml
 ➜ tomato get package.keywords[-1] Cargo.toml
 bash
 
-# Keys that don't exist
-➜ tomato get dependencies.toml_edit[0] Cargo.toml
+# Keys that don't exist return proper errors
+➜ tomato get package.nonexistent Cargo.toml
+Error: Key 'package.nonexistent' not found in TOML file
 
-➜ tomato set dependencies.toml_edit[0] "first!" Cargo.toml
-Error: unable to index into non-array at dependencies.toml_edit.0
+# Trying to index into non-arrays also errors helpfully
+➜ tomato get package.name[0] Cargo.toml
+Error: Cannot index into non-array at '[0]'
+
+# Check if keys exist (useful in shell scripts)
+➜ if tomato exists package.name Cargo.toml; then echo "found!"; fi
+found!
+➜ tomato exists package.nonexistent Cargo.toml; echo "exit code: $?"
+exit code: 1
+
+# List available keys at a path
+➜ tomato keys package Cargo.toml
+authors
+categories
+description
+edition
+license
+name
+readme
+version
 
 # rm has a number of aliases to prevent user frustration
 ➜ tomato --format json del package.categories[0] Cargo.toml
