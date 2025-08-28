@@ -121,7 +121,9 @@ impl FromStr for Format {
             "bash" => Ok(Format::Bash),
             "json" => Ok(Format::Json),
             "toml" => Ok(Format::Toml),
-            _ => Err(TomatoError::UnsupportedOutputType(input.to_string())),
+            _ => Err(TomatoError::UnsupportedOutputType {
+                format: input.to_string(),
+            }),
         }
     }
 }
@@ -184,69 +186,156 @@ pub fn write_file(toml: &DocumentMut, fpath: &str, backup: bool) -> Result<(), T
 }
 
 /// Given a key segment, find that key in this node. Returns None if the key segment is an
-/// int but the node is not an array.
-pub fn get_in_node<'a>(key: &'a KeySegment, node: &'a mut Item) -> Option<&'a mut Item> {
+/// int but the node is not an array, or if the array index is out of bounds.
+pub fn get_in_node<'a>(key: &'a KeySegment, node: &'a mut Item) -> Result<Option<&'a mut Item>, TomatoError> {
     match key {
-        KeySegment::Name(n) => node.get_mut(n),
+        KeySegment::Name(n) => Ok(node.get_mut(n)),
         KeySegment::Index(idx) => {
             if let Some(array) = node.as_array() {
                 let array_len = array.len();
                 if let Some(resolved_idx) = resolve_negative_index(*idx, array_len) {
-                    node.get_mut(resolved_idx)
+                    Ok(node.get_mut(resolved_idx))
                 } else {
-                    None
+                    let plural = if array_len == 1 { "" } else { "s" };
+                    let valid_range = if array_len > 0 {
+                        format!("0 to {}", array_len - 1)
+                    } else {
+                        "none (empty array)".to_string()
+                    };
+                    Err(TomatoError::ArrayIndexOutOfBounds {
+                        index: *idx,
+                        length: array_len,
+                        valid_range,
+                        plural: plural.to_string(),
+                    })
                 }
             } else {
-                None
+                // Cannot index into non-array types
+                let info = node_type_info(node);
+                Err(TomatoError::CannotIndexIntoNonArray {
+                    key: format!("[{}]", idx),
+                    actual_type: info.1.to_string(),
+                })
             }
         }
     }
 }
 
-/// Given a full dotted-form key from the command-line, find the matching value
-/// in the given document. Responds with Item::None if not found.
-pub fn get_key(toml: &mut DocumentMut, dotted_key: &Keyspec) -> Result<Item, TomatoError> {
-    let mut node: &mut Item = toml.as_item_mut();
-    let iterator = dotted_key.subkeys.iter();
+fn node_type_info(node: &Item) -> (bool, &str) {
+    match node {
+        Item::Value(v) => match v {
+            Value::InlineTable(_) => (false, "inline table"),
+            Value::String(_) => (true, "string"),
+            Value::Integer(_) => (true, "integer"),
+            Value::Float(_) => (true, "float"),
+            Value::Boolean(_) => (true, "boolean"),
+            Value::Datetime(_) => (true, "date-time"),
+            Value::Array(_) => (true, "array"),
+        },
+        Item::Table(_) => (false, "table"),
+        Item::ArrayOfTables(_) => (false, "array of tables"),
+        Item::None => (false, "null"),
+    }
+}
 
-    for k in iterator {
-        let Some(found) = get_in_node(k, node) else {
-            return Ok(Item::None);
+/// Helper function to traverse a key path and handle common error cases
+/// Returns the final node or an error
+fn traverse_key_path<'a>(
+    start_node: &'a mut Item,
+    key_path: &'a [KeySegment],
+    dotted_key: &Keyspec,
+) -> Result<&'a mut Item, TomatoError> {
+    let mut node = start_node;
+
+    for k in key_path {
+        // Get type information before the mutable borrow
+        let (is_primitive, type_str) = node_type_info(node);
+        let actual_type = type_str.to_string();
+
+        let found = match get_in_node(k, node)? {
+            Some(found) => found,
+            None => {
+                // Check if we're trying to access a property on a primitive value
+                if let KeySegment::Name(name) = k {
+                    if is_primitive {
+                        return Err(TomatoError::PropertyOnPrimitive {
+                            property: name.clone(),
+                            actual_type,
+                        });
+                    }
+                }
+
+                // Missing keys are always errors - this function is for strict path traversal
+                return Err(TomatoError::KeyNotFound {
+                    key: format!("{}", dotted_key),
+                    suggestion: None,
+                });
+            }
         };
+
         node = found;
+    }
+
+    Ok(node)
+}
+
+/// Given a full dotted-form key from the command-line, find the matching value
+/// in the given document. Returns an error if not found.
+pub fn get_key(toml: &mut DocumentMut, dotted_key: &Keyspec) -> Result<Item, TomatoError> {
+    let node = traverse_key_path(toml.as_item_mut(), &dotted_key.subkeys, dotted_key)?;
+
+    if let Item::None = node {
+        return Err(TomatoError::KeyNotFound {
+            key: format!("{}", dotted_key),
+            suggestion: None,
+        });
     }
 
     Ok(node.clone())
 }
 
-/// Remove the node corresponding to the given key. If the key was not found, we
-/// return an error saying so. Otherwise, we respond with the value that the key
-/// used to point to.
+/// Remove the node corresponding to the given key. If the key is a valid path that
+/// points to something that's already gone, we treat that as a non-error: running
+/// this is idempotent.
 pub fn remove_key(toml: &mut DocumentMut, dotted_key: &Keyspec) -> Result<Item, TomatoError> {
-    let mut node: &mut Item = toml.as_item_mut();
     let mut parent_key: Keyspec = dotted_key.clone();
 
     let Some(target) = parent_key.subkeys.pop() else {
         return Err(TomatoError::NoKeyToRemove);
     };
-    let iterator = parent_key.subkeys.iter();
 
-    for k in iterator {
-        let Some(found) = get_in_node(k, node) else {
-            return Err(TomatoError::KeyNotFound(dotted_key.to_string()));
-        };
-        if matches!(found, Item::None) {
-            return Err(TomatoError::KeyNotFound(dotted_key.to_string()));
+    // Traverse to the parent node - for rm, missing parent paths mean the key doesn't exist
+    let node = if parent_key.subkeys.is_empty() {
+        toml.as_item_mut()
+    } else {
+        match traverse_key_path(toml.as_item_mut(), &parent_key.subkeys, &parent_key) {
+            Ok(parent_node) => parent_node,
+            Err(_) => return Ok(Item::None), // Parent path invalid, key doesn't exist (idempotent)
         }
-        node = found;
-    }
+    };
 
-    if let Some(found) = get_in_node(&target, node) {
+    // Check the final key
+    let (is_primitive, type_str) = node_type_info(node);
+    let actual_type = type_str.to_string();
+
+    if let Some(found) = get_in_node(&target, node)? {
         let original = found.clone();
         *found = Item::None;
         return Ok(original);
     }
 
+    // If we couldn't find the key, check if it was because of invalid access
+    if let KeySegment::Name(name) = &target {
+        if is_primitive {
+            // Trying to remove a property from a primitive is an error
+            return Err(TomatoError::PropertyOnPrimitive {
+                property: name.clone(),
+                actual_type,
+            });
+        }
+    }
+
+    // Valid path but key doesn't exist - this is OK for rm (idempotent)
     Ok(Item::None)
 }
 
@@ -255,14 +344,7 @@ pub fn remove_key(toml: &mut DocumentMut, dotted_key: &Keyspec) -> Result<Item, 
 /// document. Responds with an error if the key included an index into an
 /// array for a non-array node in the document.
 pub fn set_key(toml: &mut DocumentMut, dotted_key: &Keyspec, value: &Value) -> Result<Item, TomatoError> {
-    let mut node: &mut Item = toml.as_item_mut();
-    let iterator = dotted_key.subkeys.iter();
-    for k in iterator {
-        let Some(found) = get_in_node(k, node) else {
-            return Err(TomatoError::CannotIndexIntoNonArray(dotted_key.to_string()));
-        };
-        node = found;
-    }
+    let node = traverse_key_path(toml.as_item_mut(), &dotted_key.subkeys, dotted_key)?;
 
     let original = node.clone();
     let existing: &mut Item = &mut *node;
@@ -283,21 +365,20 @@ pub fn set_key(toml: &mut DocumentMut, dotted_key: &Keyspec, value: &Value) -> R
 /// or if the key included an index into an array for a non-array node in
 /// the document.
 pub fn append_value(toml: &mut DocumentMut, dotted_key: &Keyspec, value: &str) -> Result<Item, TomatoError> {
-    let mut node: &mut Item = toml.as_item_mut();
-    let iterator = dotted_key.subkeys.iter();
-
-    for k in iterator {
-        let Some(found) = get_in_node(k, node) else {
-            return Err(TomatoError::CannotIndexIntoNonArray(dotted_key.to_string()));
-        };
-        node = found;
-    }
+    let node = traverse_key_path(toml.as_item_mut(), &dotted_key.subkeys, dotted_key)?;
 
     let original = node.clone();
 
+    // Get type info before mutable operations using consistent helper
+    let (_, type_str) = node_type_info(&original);
+    let node_type = type_str.to_string();
+
     node.or_insert(Item::Value(Value::Array(toml_edit::Array::new())))
         .as_array_mut()
-        .ok_or_else(|| TomatoError::CannotAppendToNonArray(dotted_key.to_string()))?
+        .ok_or_else(|| TomatoError::CannotAppendToNonArray {
+            key: dotted_key.to_string(),
+            actual_type: node_type,
+        })?
         .push(value);
 
     Ok(original)
@@ -445,6 +526,16 @@ mod tests {
         let key = Keyspec::from_str("testcases.hashes.mats[1]").expect("test key should be valid");
         let item = get_key(&mut doc, &key).expect("expected this key to be valid");
         assert_eq!("salt", format_item(&item, Format::Raw));
+    }
+
+    #[test]
+    fn get_key_errs_correctly() {
+        let toml = include_str!("../fixtures/sample.toml");
+        let mut doc = toml.parse::<DocumentMut>().expect("test doc should be valid toml");
+
+        let no_exists = Keyspec::from_str("cats").expect("test key should be valid");
+        let maybe_cats = get_key(&mut doc, &no_exists);
+        assert!(maybe_cats.is_err());
     }
 
     #[test]

@@ -142,13 +142,14 @@ fn missing_key_error() {
 name = "test-package"
 "#;
 
-    let (stdout, _stderr, success) = run_tomato_stdin(&["get", "package.nonexistent"], toml_data);
-    assert!(success); // get returns empty string for missing keys
-    assert_eq!(stdout.trim(), "");
+    let (_stdout, stderr, success) = run_tomato_stdin(&["get", "package.nonexistent"], toml_data);
+    assert!(!success); // get now errors on missing keys
+    assert!(stderr.contains("Key 'package.nonexistent' not found in TOML file"));
+    assert!(stderr.contains("tomato::key_not_found"));
 }
 
 #[test]
-fn test_invalid_toml_error() {
+fn invalid_toml_error() {
     let invalid_toml = r#"
 [package
 name = "test-package"
@@ -195,7 +196,7 @@ value = "deeply nested"
 }
 
 #[test]
-fn test_special_characters_in_values() {
+fn special_characters_in_values() {
     let toml_data = r#"
 [test]
 multiline = """
@@ -425,10 +426,10 @@ fruits = ["apple", "banana", "cherry", "date", "elderberry"]
     assert!(success);
     assert_eq!(stdout.trim(), "apple");
 
-    // Test out of bounds negative index (should return empty)
-    let (stdout, _stderr, success) = run_tomato_stdin(&["get", "test.fruits[-10]"], toml_data);
-    assert!(success);
-    assert_eq!(stdout.trim(), "");
+    // Test out of bounds negative index (should return error)
+    let (_stdout, stderr, success) = run_tomato_stdin(&["get", "test.fruits[-10]"], toml_data);
+    assert!(!success);
+    assert!(stderr.contains("Array index -10 is out of bounds"));
 }
 
 #[test]
@@ -531,4 +532,85 @@ fn single_quote_with_double_quotes_inside() {
     let (stdout, _stderr, success) = run_tomato_stdin(&["get", r#"test.'key "with" quotes'"#], toml_data);
     assert!(success);
     assert_eq!(stdout.trim(), "value with embedded quotes");
+}
+
+// Error handling integration tests
+#[test]
+fn array_bounds_error() {
+    let toml_data = r#"
+[test]
+fruits = ["apple", "banana", "cherry"]
+"#;
+
+    // Test positive index out of bounds
+    let (_stdout, stderr, success) = run_tomato_stdin(&["get", "test.fruits[5]"], toml_data);
+    assert!(!success);
+    assert!(stderr.contains("Array index 5 is out of bounds"));
+    assert!(stderr.contains("The array has 3 elements"));
+    assert!(stderr.contains("Valid indices are 0 to 2"));
+    assert!(stderr.contains("tomato::array_bounds"));
+
+    // Test negative index out of bounds
+    let (_stdout, stderr, success) = run_tomato_stdin(&["get", "test.fruits[-10]"], toml_data);
+    assert!(!success);
+    assert!(stderr.contains("Array index -10 is out of bounds"));
+    assert!(stderr.contains("from -1 to -3"));
+}
+
+#[test]
+fn cannot_append_to_non_array_error() {
+    let toml_data = r#"
+[test]
+name = "string value"
+count = 42
+flag = true
+"#;
+
+    // Test appending to string
+    let (_stdout, stderr, success) = run_tomato_stdin(&["append", "test.name", "value"], toml_data);
+    assert!(!success);
+    assert!(stderr.contains("Cannot append to non-array at 'test.name'"));
+    assert!(stderr.contains("is a string, not an array"));
+    assert!(stderr.contains("Use 'set' to replace"));
+
+    // Test appending to integer
+    let (_stdout, stderr, success) = run_tomato_stdin(&["append", "test.count", "value"], toml_data);
+    assert!(!success);
+    assert!(stderr.contains("is a integer, not an array"));
+
+    // Test appending to boolean
+    let (_stdout, stderr, success) = run_tomato_stdin(&["append", "test.flag", "value"], toml_data);
+    assert!(!success);
+    assert!(stderr.contains("is a boolean, not an array"));
+}
+
+#[test]
+fn invalid_key_syntax_errors() {
+    let toml_data = r#"
+[test]
+key = "value"
+"#;
+
+    // Test unterminated quote
+    let (_stdout, stderr, success) = run_tomato_stdin(&["get", r#"test."unterminated"#], toml_data);
+    assert!(!success);
+    assert!(stderr.contains("Unterminated quoted string"));
+
+    // Test invalid bracket syntax
+    let (_stdout, stderr, success) = run_tomato_stdin(&["get", "test.key["], toml_data);
+    assert!(!success);
+    assert!(stderr.contains("Expected number in array index"));
+
+    // Test empty key
+    let (_stdout, stderr, success) = run_tomato_stdin(&["get", ""], toml_data);
+    assert!(!success);
+    assert!(stderr.contains("Empty key specification"));
+}
+
+#[test]
+fn unsupported_format_error() {
+    // Test unsupported format
+    let (_stdout, stderr, success) = run_tomato(&["get", "--format", "xml", "test.key", "fixtures/sample.toml"]);
+    assert!(!success);
+    assert!(stderr.contains("Unsupported output format 'xml'"));
 }

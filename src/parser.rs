@@ -132,10 +132,10 @@ impl Tokenizer {
     fn read_quoted_string(&mut self, quote_char: char) -> Result<String, TomatoError> {
         // Expect opening quote
         if self.advance() != Some(quote_char) {
-            return Err(TomatoError::InvalidKeySegment(format!(
-                "Expected opening {}",
-                quote_char
-            )));
+            return Err(TomatoError::InvalidKeySegment {
+                message: format!("Expected opening {}", quote_char),
+                help_text: Some("If you meant to use a literal quote, escape it with a backslash".to_string()),
+            });
         }
 
         let mut result = String::new();
@@ -167,7 +167,10 @@ impl Tokenizer {
             }
         }
 
-        Err(TomatoError::InvalidKeySegment("Unterminated quoted string".to_string()))
+        Err(TomatoError::InvalidKeySegment {
+            message: "Unterminated quoted string".to_string(),
+            help_text: Some(format!("Add a closing {} quote to complete the string", quote_char)),
+        })
     }
 
     fn read_number(&mut self) -> Result<isize, TomatoError> {
@@ -189,9 +192,10 @@ impl Tokenizer {
             }
         }
 
-        result
-            .parse::<isize>()
-            .map_err(|_| TomatoError::InvalidKeySegment(format!("Invalid number: {}", result)))
+        result.parse::<isize>().map_err(|_| TomatoError::InvalidKeySegment {
+            message: format!("Invalid number: {}", result),
+            help_text: Some("Array indices must be integers".to_string()),
+        })
     }
 
     fn next_token(&mut self) -> Result<Token, TomatoError> {
@@ -227,7 +231,10 @@ impl Tokenizer {
                 let name = self.read_bare_key();
                 Ok(Token::Name(name))
             }
-            Some(ch) => Err(TomatoError::InvalidKeySegment(format!("Unexpected character: {}", ch))),
+            Some(ch) => Err(TomatoError::InvalidKeySegment {
+                message: format!("Unexpected character: '{}'", ch),
+                help_text: Some("Expected a key name, array index, or quoted string".to_string()),
+            }),
         }
     }
 }
@@ -271,16 +278,22 @@ impl Parser {
                 self.advance()?;
                 Ok(segment)
             }
-            _ => Err(TomatoError::InvalidKeySegment(
-                "Expected key name or number".to_string(),
-            )),
+            _ => Err(TomatoError::InvalidKeySegment {
+                message: "Expected key name or number".to_string(),
+                help_text: Some(
+                    "Valid key segments are: bare names (abc), quoted strings (\"a b\"), or numbers (123)".to_string(),
+                ),
+            }),
         }
     }
 
     fn parse_array_index(&mut self) -> Result<KeySegment, TomatoError> {
         // Expect left bracket
         if !matches!(self.current_token, Token::LeftBracket) {
-            return Err(TomatoError::InvalidKeySegment("Expected '['".to_string()));
+            return Err(TomatoError::InvalidKeySegment {
+                message: "Expected '['".to_string(),
+                help_text: Some("Array indices must be enclosed in brackets, e.g., array[0]".to_string()),
+            });
         }
         self.advance()?;
 
@@ -288,16 +301,20 @@ impl Parser {
         let index = match &self.current_token {
             Token::Number(num) => *num,
             _ => {
-                return Err(TomatoError::InvalidKeySegment(
-                    "Expected number in array index".to_string(),
-                ))
+                return Err(TomatoError::InvalidKeySegment {
+                    message: "Expected number in array index".to_string(),
+                    help_text: Some("Array indices must be integers, e.g., [0], [-1], [42]".to_string()),
+                })
             }
         };
         self.advance()?;
 
         // Expect right bracket
         if !matches!(self.current_token, Token::RightBracket) {
-            return Err(TomatoError::InvalidKeySegment("Expected ']'".to_string()));
+            return Err(TomatoError::InvalidKeySegment {
+                message: "Expected ']'".to_string(),
+                help_text: Some("Array indices must be properly closed with ']'".to_string()),
+            });
         }
         self.advance()?;
 
@@ -309,7 +326,10 @@ impl Parser {
 
         // Parse first segment (required)
         if matches!(self.current_token, Token::End) {
-            return Err(TomatoError::InvalidKeySegment("Empty key specification".to_string()));
+            return Err(TomatoError::InvalidKeySegment {
+                message: "Empty key specification".to_string(),
+                help_text: Some("Provide a key name, e.g., 'package.name' or 'array[0]'".to_string()),
+            });
         }
 
         subkeys.push(self.parse_key_segment()?);
@@ -326,10 +346,10 @@ impl Parser {
                 }
                 Token::End => break,
                 _ => {
-                    return Err(TomatoError::InvalidKeySegment(format!(
-                        "Unexpected token: {:?}",
-                        self.current_token
-                    )));
+                    return Err(TomatoError::InvalidKeySegment {
+                        message: format!("Unexpected token: {:?}", self.current_token),
+                        help_text: Some("Expected '.', '[index]', or end of key specification".to_string()),
+                    });
                 }
             }
         }
