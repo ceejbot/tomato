@@ -1,6 +1,7 @@
+use miette::Diagnostic;
 use thiserror::Error;
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Diagnostic)]
 pub enum TomatoError {
     #[error("Unsupported output type: {0}")]
     UnsupportedOutputType(String),

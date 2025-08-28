@@ -17,7 +17,7 @@ To install:
 brew tap ceejbot/tap
 brew install tomato
 
-# if you have rust installed and prefer to build from source:
+# if you have Rust installed and prefer to build from source:
 cargo install tomato-toml
 
 # once installed:
@@ -51,7 +51,24 @@ for `eval` inside bash. Use this for arrays and associative arrays. If you need
 to consume more complex output, you might select `json` format and pipe the
 results to `jq`. And of course if you need TOML, use `toml`.
 
-The longer version:
+## Keys
+
+What is this dotted key notation, you ask? Sort of jq-ish, but more toml. Specifically:
+
+- All valid TOML keys are valid `tomato` keys.
+- TOML keys may be either bare, quoted, or dotted. (Though shell quoting rules still apply.)
+- Bare keys may only contain ASCII letters, ASCII digits, underscores, and dashes `(A-Za-z0-9_-)`.
+- `1234` is a valid bare key; it is treated as a string.
+- Keys with spaces in them must be quoted; the same for keys with literal dots like `"cats.are.good"`.
+- `tomato` treats bare keys with dots the same way TOML does: as implicitly creating tables and referencing things inside the table. (This was the inspiration for the syntax.)
+
+`tomato` does one additional thing that makes sense for its use case but not for TOML's:
+
+- `tomato` supports indexing into arrays; indexing is 0-based.
+- Negative number indexes count from the end of an array, with -1 being the last element.
+
+
+## Cli usage
 
 ```text
 🍅 tomato 0.2.0
@@ -90,12 +107,12 @@ OPTIONS:
 			Print version information
 
 SUBCOMMANDS:
-	get     Get the value of a key from the given file
-	set     Set a key to the given value, returning the previous value if one existed
-	rm      Delete a key from the given file, returning the previous value if one existed
-	completions
-			Generate completions for the named shell
-	help    Print this message or the help of the given subcommand(s)
+get          Get the value of a key from the given file
+set          Set a key to the given value, returning the previous value if one existed
+rm           Delete a key from the given file, returning the previous value if one existed
+append       Append the given value to an array, returning the previous array if one existed
+completions  Generate completions for the named shell
+help         Print this message or the help of the given subcommand(s)
 ```
 
 `get` and `rm` both print empty string to stdout if the target key is not found. `set`
@@ -131,27 +148,31 @@ true
 Here are some examples run against the Cargo manifest for this project:
 
 ```shell
-$ tomato get package.name Cargo.toml
+➜ tomato get package.name Cargo.toml
 tomato
-$ tomato --format json get package.name Cargo.toml
+➜ tomato --format json get package.name Cargo.toml
 "tomato"
-$ cat Cargo.toml | tomato get package.name
+➜ cat Cargo.toml | tomato get package.name
 tomato
 
 # set examples
-$ tomato set package.name broccoli Cargo.toml
+➜ tomato set package.name broccoli Cargo.toml
 tomato
-$ tomato set package.keywords[1] yaml Cargo.toml
+➜ tomato get package.keywords[0] Cargo.toml
+cli
+➜ tomato set package.keywords[1] yaml Cargo.toml
 toml
+➜ tomato get package.keywords[-1] Cargo.toml
+bash
 
 # Keys that don't exist
-$ tomato get dependencies.toml_edit[0] Cargo.toml
+➜ tomato get dependencies.toml_edit[0] Cargo.toml
 
-$ tomato set dependencies.toml_edit[0] "first!" Cargo.toml
+➜ tomato set dependencies.toml_edit[0] "first!" Cargo.toml
 Error: unable to index into non-array at dependencies.toml_edit.0
 
 # rm has a number of aliases to prevent user frustration
-$ tomato --format json del package.categories[0] Cargo.toml
+➜ tomato --format json del package.categories[0] Cargo.toml
 "command-line-utilities"
 ```
 

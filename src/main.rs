@@ -2,26 +2,25 @@ use std::fs::File;
 use std::io::prelude::*;
 use std::io::BufReader;
 use std::str::FromStr;
-use std::sync::LazyLock;
 
 use clap::builder::styling::AnsiColor;
 use clap::builder::Styles;
 use clap::{Parser, Subcommand};
 use clap_complete::{generate, Shell};
-use regex::Regex;
 use toml_edit::{DocumentMut, Item, Value};
 
 mod json;
 use json::format_json;
 mod bash;
 use bash::format_bash;
-mod keys;
-use keys::*;
+mod parser;
+// Use the new parser's types
+use parser::{resolve_negative_index, KeySegment, Keyspec};
 mod errors;
 use errors::TomatoError;
 
 #[derive(Parser, Debug)]
-#[clap(name = "🍅 tomato", version, styles = v3_styles())]
+#[clap(name = "🍅 tomato", version, styles = v3_styles(), max_term_width=100)]
 /// A command-line tool to get and set values in toml files while preserving comments and
 /// formatting.
 ///
@@ -127,9 +126,6 @@ impl FromStr for Format {
     }
 }
 
-pub static QUOTED_STRING_REGEX: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r#"^"(.+)"|'(.+)'$"#).expect("quoted string regex is expected to compile"));
-
 // A wrapper around toml_edit values to allow us to distinguish between `"true"`
 // (a string) and `true` (a boolean) as command-line arguments.
 #[derive(Debug, Clone)]
@@ -141,15 +137,10 @@ impl FromStr for TomlVal {
     type Err = TomatoError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let inner = if let Some(captures) = QUOTED_STRING_REGEX.captures(s) {
-            let core = if let Some(_c) = captures.get(1) {
-                captures[1].to_string()
-            } else if let Some(_c) = captures.get(2) {
-                captures[2].to_string()
-            } else {
-                s.to_string()
-            };
-            core.into()
+        let inner = if (s.starts_with('"') && s.ends_with('"')) || (s.starts_with('\'') && s.ends_with('\'')) {
+            // Extract quoted string content
+            let content = &s[1..s.len() - 1];
+            content.into()
         } else if s == "true" {
             Value::from(true)
         } else if s == "false" {
@@ -198,8 +189,13 @@ pub fn get_in_node<'a>(key: &'a KeySegment, node: &'a mut Item) -> Option<&'a mu
     match key {
         KeySegment::Name(n) => node.get_mut(n),
         KeySegment::Index(idx) => {
-            if node.as_array().is_some() {
-                node.get_mut(*idx)
+            if let Some(array) = node.as_array() {
+                let array_len = array.len();
+                if let Some(resolved_idx) = resolve_negative_index(*idx, array_len) {
+                    node.get_mut(resolved_idx)
+                } else {
+                    None
+                }
             } else {
                 None
             }
@@ -364,7 +360,7 @@ fn v3_styles() -> Styles {
 }
 
 /// Parse command-line args and do whatever our user wants!
-fn main() -> Result<(), TomatoError> {
+fn main() -> miette::Result<()> {
     let args = Args::parse();
 
     match args.cmd {

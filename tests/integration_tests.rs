@@ -156,7 +156,7 @@ name = "test-package"
 
     let (_stdout, stderr, success) = run_tomato_stdin(&["get", "package.name"], invalid_toml);
     assert!(!success);
-    assert!(stderr.contains("TomlError") || stderr.contains("invalid"));
+    assert!(stderr.contains("TOML parse error") || stderr.contains("unclosed table"));
 }
 
 #[test]
@@ -218,7 +218,7 @@ with_newline = "First\nSecond"
 }
 
 #[test]
-fn test_empty_string_value() {
+fn empty_string_value() {
     let toml_data = r#"
 [test]
 empty = ""
@@ -401,4 +401,134 @@ nan = nan
     let (stdout, _stderr, success) = run_tomato_stdin(&["get", "numbers.inf"], toml_data);
     assert!(success);
     assert_eq!(stdout.trim(), "inf");
+}
+
+#[test]
+fn negative_array_indexing() {
+    let toml_data = r#"
+[test]
+fruits = ["apple", "banana", "cherry", "date", "elderberry"]
+"#;
+
+    // Test last element
+    let (stdout, _stderr, success) = run_tomato_stdin(&["get", "test.fruits[-1]"], toml_data);
+    assert!(success);
+    assert_eq!(stdout.trim(), "elderberry");
+
+    // Test second to last
+    let (stdout, _stderr, success) = run_tomato_stdin(&["get", "test.fruits[-2]"], toml_data);
+    assert!(success);
+    assert_eq!(stdout.trim(), "date");
+
+    // Test first element using negative index
+    let (stdout, _stderr, success) = run_tomato_stdin(&["get", "test.fruits[-5]"], toml_data);
+    assert!(success);
+    assert_eq!(stdout.trim(), "apple");
+
+    // Test out of bounds negative index (should return empty)
+    let (stdout, _stderr, success) = run_tomato_stdin(&["get", "test.fruits[-10]"], toml_data);
+    assert!(success);
+    assert_eq!(stdout.trim(), "");
+}
+
+#[test]
+fn negative_array_set() {
+    let toml_data = r#"
+[test]
+fruits = ["apple", "banana", "cherry"]
+"#;
+
+    // Set last element using negative index
+    let (stdout, _stderr, success) = run_tomato_stdin(&["set", "test.fruits[-1]", "orange"], toml_data);
+    assert!(success);
+    assert!(stdout.contains("apple"));
+    assert!(stdout.contains("banana"));
+    assert!(stdout.contains("orange"));
+    assert!(!stdout.contains("cherry"));
+
+    // Set first element using negative index
+    let (stdout, _stderr, success) = run_tomato_stdin(&["set", "test.fruits[-3]", "pear"], toml_data);
+    assert!(success);
+    assert!(stdout.contains("pear"));
+    assert!(stdout.contains("banana"));
+    assert!(stdout.contains("cherry"));
+    assert!(!stdout.contains("apple"));
+}
+
+#[test]
+fn negative_array_remove() {
+    let toml_data = r#"
+[test]
+fruits = ["apple", "banana", "cherry", "date"]
+"#;
+
+    // Remove last element using negative index
+    let (stdout, _stderr, success) = run_tomato_stdin(&["rm", "test.fruits[-1]"], toml_data);
+    assert!(success);
+    assert!(stdout.contains("apple"));
+    assert!(stdout.contains("banana"));
+    assert!(stdout.contains("cherry"));
+    assert!(!stdout.contains("date"));
+}
+
+#[test]
+fn single_quote_key_parsing() {
+    let toml_data = r#"
+[test]
+"key with spaces" = "double quoted"
+normalkey = "normal"
+"key.with.dots" = "dotted"
+"#;
+
+    // Test single quotes for keys with spaces
+    let (stdout, _stderr, success) = run_tomato_stdin(&["get", "test.'key with spaces'"], toml_data);
+    assert!(success);
+    assert_eq!(stdout.trim(), "double quoted");
+
+    // Test mixed quoting
+    let (stdout, _stderr, success) = run_tomato_stdin(&["get", "'test'.'key with spaces'"], toml_data);
+    assert!(success);
+    assert_eq!(stdout.trim(), "double quoted");
+
+    // Test single quotes for keys with dots
+    let (stdout, _stderr, success) = run_tomato_stdin(&["get", "test.'key.with.dots'"], toml_data);
+    assert!(success);
+    assert_eq!(stdout.trim(), "dotted");
+}
+
+#[test]
+fn single_quote_edge_cases() {
+    let toml_data = r#"
+[test]
+"" = "empty key"
+"true" = "boolean string key"
+"false" = "another boolean string key"
+"#;
+
+    // Test empty single-quoted key
+    let (stdout, _stderr, success) = run_tomato_stdin(&["get", "test.''"], toml_data);
+    assert!(success);
+    assert_eq!(stdout.trim(), "empty key");
+
+    // Test single-quoted boolean string keys
+    let (stdout, _stderr, success) = run_tomato_stdin(&["get", "test.'true'"], toml_data);
+    assert!(success);
+    assert_eq!(stdout.trim(), "boolean string key");
+
+    let (stdout, _stderr, success) = run_tomato_stdin(&["get", "test.'false'"], toml_data);
+    assert!(success);
+    assert_eq!(stdout.trim(), "another boolean string key");
+}
+
+#[test]
+fn single_quote_with_double_quotes_inside() {
+    let toml_data = r#"
+[test]
+'key "with" quotes' = "value with embedded quotes"
+"#;
+
+    // Single quotes should handle double quotes inside without escaping
+    let (stdout, _stderr, success) = run_tomato_stdin(&["get", r#"test.'key "with" quotes'"#], toml_data);
+    assert!(success);
+    assert_eq!(stdout.trim(), "value with embedded quotes");
 }
