@@ -71,7 +71,9 @@ pub enum TomatoError {
     #[error("Array index {index} is out of bounds")]
     #[diagnostic(
         code(tomato::array_bounds),
-        help("The array has {length} element{plural}. Valid indices are {valid_range} (or negative indices from -1 to -{length})")
+        help(
+            "The array has {length} element{plural}. Valid indices are {valid_range} (or negative indices from -1 to -{length})"
+        )
     )]
     ArrayIndexOutOfBounds {
         index: isize,

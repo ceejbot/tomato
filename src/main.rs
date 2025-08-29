@@ -1,12 +1,12 @@
 use std::fs::File;
-use std::io::prelude::*;
 use std::io::BufReader;
+use std::io::prelude::*;
 use std::str::FromStr;
 
-use clap::builder::styling::AnsiColor;
 use clap::builder::Styles;
+use clap::builder::styling::AnsiColor;
 use clap::{Parser, Subcommand};
-use clap_complete::{generate, Shell};
+use clap_complete::{Shell, generate};
 use toml_edit::{DocumentMut, Item, Value};
 
 mod json;
@@ -15,7 +15,7 @@ mod bash;
 use bash::format_bash;
 mod parser;
 // Use the new parser's types
-use parser::{resolve_negative_index, KeySegment, Keyspec};
+use parser::{KeySegment, Keyspec, resolve_negative_index};
 mod errors;
 use errors::{DisplayInfo, TomatoError};
 
@@ -257,13 +257,13 @@ fn traverse_key_path<'a>(
             Some(found) => found,
             None => {
                 // Check if we're trying to access a property on a primitive value
-                if let KeySegment::Name(name) = k {
-                    if is_primitive {
-                        return Err(TomatoError::PropertyOnPrimitive {
-                            property: name.clone(),
-                            value_type,
-                        });
-                    }
+                if let KeySegment::Name(name) = k
+                    && is_primitive
+                {
+                    return Err(TomatoError::PropertyOnPrimitive {
+                        property: name.clone(),
+                        value_type,
+                    });
                 }
 
                 // Missing keys are always errors - this function is for strict path traversal
@@ -325,14 +325,14 @@ pub fn remove_key(toml: &mut DocumentMut, dotted_key: &Keyspec) -> Result<Item, 
     }
 
     // If we couldn't find the key, check if it was because of invalid access
-    if let KeySegment::Name(name) = &target {
-        if is_primitive {
-            // Trying to remove a property from a primitive is an error
-            return Err(TomatoError::PropertyOnPrimitive {
-                property: name.clone(),
-                value_type,
-            });
-        }
+    if let KeySegment::Name(name) = &target
+        && is_primitive
+    {
+        // Trying to remove a property from a primitive is an error
+        return Err(TomatoError::PropertyOnPrimitive {
+            property: name.clone(),
+            value_type,
+        });
     }
 
     // Valid path but key doesn't exist - this is OK for rm (idempotent)
@@ -642,9 +642,10 @@ mod tests {
         let item = append_value(&mut doc, &key, "orange").expect("expected to be able to insert value 'orange'");
         let formatted = format_toml(&item);
         assert_eq!(formatted, r#"[ "tomato", "plum", "pluot", "kumquat", "persimmon" ]"#);
-        assert!(doc
-            .to_string()
-            .contains(r#"fruits = [ "tomato", "plum", "pluot", "kumquat", "persimmon" , "orange"]"#));
+        assert!(
+            doc.to_string()
+                .contains(r#"fruits = [ "tomato", "plum", "pluot", "kumquat", "persimmon" , "orange"]"#)
+        );
     }
 
     #[test]
@@ -655,15 +656,17 @@ mod tests {
         let key = Keyspec::from_str("testcases.these.are.not.fruits").expect("test key should be valid");
         let item = append_value(&mut doc, &key, "leek").expect("expected to be able to insert value 'leek'");
         assert!(item.is_none());
-        assert!(doc
-            .to_string()
-            .contains(r#"these = { are = { not = { fruits = ["leek"] } } }"#));
+        assert!(
+            doc.to_string()
+                .contains(r#"these = { are = { not = { fruits = ["leek"] } } }"#)
+        );
 
         let item = append_value(&mut doc, &key, "artichoke").expect("expected to be able to insert value 'artichoke'");
         assert_eq!(format_toml(&item), r#"["leek"]"#);
-        assert!(doc
-            .to_string()
-            .contains(r#"these = { are = { not = { fruits = ["leek", "artichoke"] } } }"#));
+        assert!(
+            doc.to_string()
+                .contains(r#"these = { are = { not = { fruits = ["leek", "artichoke"] } } }"#)
+        );
 
         let key = Keyspec::from_str("testcases.these.are.maybe.fruits").expect("test key should be valid");
         let item = append_value(&mut doc, &key, "banana").expect("expected to be able to insert value 'banana'");

@@ -63,7 +63,7 @@ mod tests {
     use toml_edit::DocumentMut;
 
     use super::*;
-    use crate::{get_key, Keyspec};
+    use crate::{Keyspec, get_key};
 
     #[test]
     fn json_output() {

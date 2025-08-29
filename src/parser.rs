@@ -304,7 +304,7 @@ impl Parser {
                 return Err(TomatoError::InvalidKeySegment {
                     message: "Expected number in array index".to_string(),
                     help_text: Some("Array indices must be integers, e.g., [0], [-1], [42]".to_string()),
-                })
+                });
             }
         };
         self.advance()?;
@@ -371,11 +371,7 @@ impl FromStr for Keyspec {
 pub fn resolve_negative_index(index: isize, array_length: usize) -> Option<usize> {
     if index >= 0 {
         let idx = index as usize;
-        if idx < array_length {
-            Some(idx)
-        } else {
-            None
-        }
+        if idx < array_length { Some(idx) } else { None }
     } else {
         let abs_index = (-index) as usize;
         if abs_index <= array_length {
