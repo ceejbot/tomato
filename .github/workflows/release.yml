@@ -1,6 +1,6 @@
 name: release
 permissions:
-    contents: write
+    contents: read
 
 on:
     push:
@@ -11,7 +11,7 @@ on:
             ref_name:
                 type: string
                 description: the refname to build a release from
-                default: "latest"
+                required: true
 
 concurrency:
     group: ${{ github.workflow }}-${{ github.ref }}
@@ -25,33 +25,16 @@ jobs:
         name: preflight
         runs-on: ubuntu-latest
         steps:
-            - uses: actions/checkout@v4
-
-            - name: get stable + nightly Rust
-              uses: actions-rust-lang/setup-rust-toolchain@v1
-              with:
-                  toolchain: nightly, stable
-                  target: x86_64-unknown-linux-gnu, aarch64-unknown-linux-gnu
-                  components: clippy, rustfmt
-                  cache-directories: |
-                      ~/.cargo/registry
-                      ~/.cargo/bin
-                      target
-
-            - name: consult Clippy
-              run: cargo +stable clippy --all-targets
-
-            - name: check formatting
-              run: cargo +nightly fmt --check --all
-
             - name: set ref_name
               shell: bash
               run: |
-                  if [ -n "${{ inputs.ref_name }}" ]; then
-                    echo "REF_NAME=${{ inputs.ref_name }}" >> $GITHUB_ENV
+                  if [ -n "${INPUTS_REF_NAME}" ]; then
+                    echo "REF_NAME=${INPUTS_REF_NAME}" >> $GITHUB_ENV
                   else
-                    echo "REF_NAME=${{ github.ref_name }}" >> $GITHUB_ENV
+                    echo "REF_NAME=${GITHUB_REF_NAME}" >> $GITHUB_ENV
                   fi
+              env:
+                INPUTS_REF_NAME: ${{ inputs.ref_name }}
 
             - name: create github release
               continue-on-error: true # for testing
@@ -64,26 +47,32 @@ jobs:
         name: release-linux
         runs-on: ubuntu-latest
         needs: preflight
+        permissions:
+            contents: write
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+              with:
+                persist-credentials: false
 
             - name: get stable Rust
-              uses: actions-rust-lang/setup-rust-toolchain@v1
+              uses: actions-rust-lang/setup-rust-toolchain@46268bd060767258de96ed93c1251119784f2ab6 # v1
               with:
                   toolchain: stable
                   cache-directories: |
                       ~/.cargo/registry
                       ~/.cargo/bin
                       target
+                  cache: false
 
             - name: build for release and upload
               env:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
                   GITHUB_ACCESS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  INPUTS_REF_NAME: ${{ inputs.ref_name }}
               run: |
-                  REF_NAME="${{ github.ref_name }}"
-                  if [ -n "${{ inputs.ref_name }}" ]; then
-                      REF_NAME="${{ inputs.ref_name }}"
+                  REF_NAME="${GITHUB_REF_NAME}"
+                  if [ -n "${INPUTS_REF_NAME}" ]; then
+                      REF_NAME="${INPUTS_REF_NAME}"
                   fi
                   cargo +stable build --release
                   tar czf tomato-x86_64-unknown-linux-gnu.tar.gz --strip-components=2  target/release/tomato
@@ -93,11 +82,15 @@ jobs:
         name: release-macos
         runs-on: macos-latest
         needs: preflight
+        permissions:
+            contents: write
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+              with:
+                persist-credentials: false
 
             - name: get stable Rust
-              uses: actions-rust-lang/setup-rust-toolchain@v1
+              uses: actions-rust-lang/setup-rust-toolchain@46268bd060767258de96ed93c1251119784f2ab6 # v1
               with:
                   toolchain: stable
                   target: aarch64-apple-darwin, x86_64-apple-darwin
@@ -105,6 +98,7 @@ jobs:
                       ~/.cargo/registry
                       ~/.cargo/bin
                       target
+                  cache: false
 
             - name: build for release
               run: |
@@ -114,10 +108,11 @@ jobs:
             - name: upload release assets
               env:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  INPUTS_REF_NAME: ${{ inputs.ref_name }}
               run: |
-                  REF_NAME="${{ github.ref_name }}"
-                  if [ -n "${{ inputs.ref_name }}" ]; then
-                      REF_NAME="${{ inputs.ref_name }}"
+                  REF_NAME="${GITHUB_REF_NAME}"
+                  if [ -n "${INPUTS_REF_NAME}" ]; then
+                      REF_NAME="${INPUTS_REF_NAME}"
                   fi
                   mkdir -p dist
                   cd dist
@@ -129,11 +124,15 @@ jobs:
     postflight:
         name: postflight
         runs-on: ubuntu-latest
+        permissions:
+            contents: write
         needs:
             - release-linux
             - release-macos
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+              with:
+                persist-credentials: false
 
             - name: get formulaic on path
               shell: bash
@@ -144,11 +143,13 @@ jobs:
             - name: set ref_name
               shell: bash
               run: |
-                  if [ -n "${{ inputs.ref_name }}" ]; then
-                    echo "REF_NAME=${{ inputs.ref_name }}" >> $GITHUB_ENV
+                  if [ -n "${INPUTS_REF_NAME}" ]; then
+                    echo "REF_NAME=${INPUTS_REF_NAME}" >> $GITHUB_ENV
                   else
-                    echo "REF_NAME=${{ github.ref_name }}" >> $GITHUB_ENV
+                    echo "REF_NAME=${GITHUB_REF_NAME}" >> $GITHUB_ENV
                   fi
+              env:
+                INPUTS_REF_NAME: ${{ inputs.ref_name }}
 
             - name: publish the draft release
               env:

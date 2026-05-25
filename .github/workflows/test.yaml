@@ -1,46 +1,72 @@
 name: "Tests"
 on:
-  push:
-    branches: [ "latest" ]
-    paths:
-      - src/**
-      - fixtures/**
-      - Cargo.toml
-      - Cargo.lock
-      - .github/workflows/test.yaml
-  pull_request:
-    branches: [ "latest" ]
-  workflow_dispatch:
+    push:
+        branches: [ "latest" ]
+        paths:
+        - src/**
+        - fixtures/**
+        - Cargo.toml
+        - Cargo.lock
+        - .github/workflows/test.yaml
+    pull_request:
+        branches: [ "latest" ]
+    workflow_dispatch:
+permissions:
+    contents: read
 
 env:
-  CARGO_TERM_COLOR: always
+    CARGO_TERM_COLOR: always
+    SCCACHE_GHA_ENABLED: "true"
+    RUSTC_WRAPPER: "sccache"
 
 jobs:
-  test:
-    name: test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
+    test:
+        name: test
+        runs-on: ubuntu-latest
+        steps:
+        - name: checkout
+          uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+          with:
+            persist-credentials: false
 
-      - uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
+        - name: sccache-cache
+          uses: mozilla-actions/sccache-action@9e7fa8a12102821edf02ca5dbea1acd0f89a2696
 
-      - name: get cargo-nextest on path
-        run: |
-          curl -sL https://get.nexte.st/latest/linux -o nextest.tgz
-          tar xfz nextest.tgz
-          mv cargo-nextest /home/runner/.cargo/bin
+        - name: get stable Rust
+          uses: actions-rust-lang/setup-rust-toolchain@46268bd060767258de96ed93c1251119784f2ab6 # v1
+          with:
+            toolchain: stable
+            cache-directories: |
+                ~/.cargo/registry
+                ~/.cargo/bin
+                target
 
-      - name: run the tests
-        run: cargo nextest run
+        - name: get cargo-nextest on path
+          run: |
+            curl -sL https://get.nexte.st/latest/linux -o nextest.tgz
+            tar xfz nextest.tgz
+            mv cargo-nextest /home/runner/.cargo/bin
+
+        - name: run the tests
+          run: cargo nextest run
+
+    fmt:
+        name: formatting check
+        runs-on: ubuntu-latest
+        steps:
+            - name: checkout
+              uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+              with:
+                persist-credentials: false
+
+            - name: sccache-cache
+              uses: mozilla-actions/sccache-action@9e7fa8a12102821edf02ca5dbea1acd0f89a2696
+
+            - name: Install nightly Rust
+              uses: actions-rust-lang/setup-rust-toolchain@46268bd060767258de96ed93c1251119784f2ab6
+              with:
+                  toolchain: nightly
+                  components: rustfmt
+
+            - name: check formatting
+              run: cargo +nightly fmt --check --all
