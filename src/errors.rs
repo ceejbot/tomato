@@ -62,11 +62,15 @@ pub enum TomatoError {
     CannotListKeysOnNonTable { key: String, value_type: String },
 
     #[error("Invalid key syntax: {message}")]
-    #[diagnostic(
-        code(tomato::invalid_key),
-        help("Check your key syntax. Keys can be bare (abc), quoted (\"a.b.c\"), or use array indices (arr[0])")
-    )]
-    InvalidKeySegment { message: String, help_text: Option<String> },
+    #[diagnostic(code(tomato::invalid_key))]
+    InvalidKeySegment {
+        message: String,
+        // Each construction site supplies a specific hint (e.g. "Add a closing quote").
+        // `#[help]` surfaces it through miette; keys are parsed in `main` (not by clap's
+        // value parser) so these diagnostics actually reach the user.
+        #[help]
+        help_text: Option<String>,
+    },
 
     #[error("Array index {index} is out of bounds")]
     #[diagnostic(

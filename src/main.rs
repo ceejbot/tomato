@@ -54,7 +54,7 @@ enum Command {
     #[clap(display_order = 1)]
     Get {
         /// The key to look for. Use dots as path separators.
-        key: Keyspec,
+        key: String,
         /// The toml file to read from. Omit to read from stdin.
         file: Option<String>,
     },
@@ -62,7 +62,7 @@ enum Command {
     #[clap(display_order = 2)]
     Set {
         /// The key to set a value for. Use dots as path separators.
-        key: Keyspec,
+        key: String,
         /// The new value.
         value: TomlVal,
         /// The toml file to read from. Omit to read from stdin. If you read from stdin,
@@ -74,7 +74,7 @@ enum Command {
     #[clap(aliases = &["del", "delete", "delet", "forget", "regret", "remove", "unset", "yank", "yeet"], display_order=3)]
     Rm {
         /// The key to remove from the file. Use dots as path separators.
-        key: Keyspec,
+        key: String,
         /// The toml file to read from. Omit to read from stdin. If you read from stdin,
         /// the normal output of the old value is suppressed. Instead the modified file is written
         /// to stdout in json if you requested json, toml otherwise.
@@ -84,7 +84,7 @@ enum Command {
     #[clap(display_order = 4)]
     Append {
         /// The full key path of the array you want to append to.
-        key: Keyspec,
+        key: String,
         /// The value to append to the array.
         value: String,
         /// The toml file to modify. Omit to read from stdin.
@@ -94,7 +94,7 @@ enum Command {
     #[clap(display_order = 5)]
     Exists {
         /// The key to check the existence of.
-        key: Keyspec,
+        key: String,
         /// The toml file to read from. Omit to read from stdin.
         file: Option<String>,
     },
@@ -102,7 +102,7 @@ enum Command {
     #[clap(display_order = 6)]
     Keys {
         /// The key to list subkeys for.
-        key: Keyspec,
+        key: String,
         /// The toml file to read from. Omit to read from stdin.
         file: Option<String>,
     },
@@ -186,26 +186,31 @@ fn main() -> miette::Result<()> {
 
     match args.cmd {
         Command::Get { key, file } => {
+            let key: Keyspec = key.parse()?;
             let mut toml = parse_file(file.as_ref())?;
             let item = get_key(&mut toml, &key)?;
             println!("{}", format_item(&item, args.format));
         }
         Command::Rm { key, file } => {
+            let key: Keyspec = key.parse()?;
             let mut toml = parse_file(file.as_ref())?;
             let original = remove_key(&mut toml, &key)?;
             emit(&toml, &original, file, args.format, args.backup)?;
         }
         Command::Set { key, value, file } => {
+            let key: Keyspec = key.parse()?;
             let mut toml = parse_file(file.as_ref())?;
             let original = set_key(&mut toml, &key, &value.inner)?;
             emit(&toml, &original, file, args.format, args.backup)?;
         }
         Command::Append { key, value, file } => {
+            let key: Keyspec = key.parse()?;
             let mut toml = parse_file(file.as_ref())?;
             let original = append_value(&mut toml, &key, &value)?;
             emit(&toml, &original, file, args.format, args.backup)?;
         }
         Command::Exists { key, file } => {
+            let key: Keyspec = key.parse()?;
             let mut toml = parse_file(file.as_ref())?;
             match get_key(&mut toml, &key) {
                 Ok(_) => {} // found, fall through and exit with Ok below
@@ -225,6 +230,7 @@ fn main() -> miette::Result<()> {
             }
         }
         Command::Keys { key, file } => {
+            let key: Keyspec = key.parse()?;
             let mut toml = parse_file(file.as_ref())?;
             let parent = get_key(&mut toml, &key)?;
             let keys = list_keys(&parent, &key)?;
