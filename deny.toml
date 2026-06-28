@@ -1,0 +1,32 @@
+# cargo-deny configuration -- the one-command supply-chain gate.
+# Run it with `cargo deny check` (advisories + licenses + bans + sources).
+
+[advisories]
+# Fail on crates pulled from a version that has since been yanked.
+yanked = "deny"
+
+[licenses]
+# Permissive licenses we accept across the dependency tree, plus this crate's
+# own Blue Oak license. Keep this list tight: add an entry only after eyeballing
+# the crate that needs it.
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "ISC",
+    "Unicode-3.0",
+    "Unlicense",
+    "Zlib",
+    "BlueOak-1.0.0",
+]
+confidence-threshold = 0.9
+
+[bans]
+# Duplicate transitive versions (e.g. unicode-width 0.1 and 0.2) are noise, not
+# a gate -- warn so they're visible without blocking CI.
+multiple-versions = "warn"
+wildcards = "deny"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
