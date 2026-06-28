@@ -22,9 +22,33 @@ env:
 
 jobs:
     preflight:
+        permissions:
+            contents: write
         name: preflight
         runs-on: ubuntu-latest
         steps:
+            - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+              with:
+                persist-credentials: false
+
+            - name: get stable + nightly Rust
+              uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
+              with:
+                  toolchain: nightly, stable
+                  target: x86_64-unknown-linux-gnu, aarch64-unknown-linux-gnu
+                  components: clippy, rustfmt
+                  cache-directories: |
+                      ~/.cargo/registry
+                      ~/.cargo/bin
+                      target
+                  cache: false
+
+            - name: consult Clippy
+              run: cargo +stable clippy --all-targets
+
+            - name: check formatting
+              run: cargo +nightly fmt --check --all
+
             - name: set ref_name
               shell: bash
               run: |
@@ -40,8 +64,8 @@ jobs:
               continue-on-error: true # for testing
               env:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-              run: |
-                  _release_url=$(gh release create "$REF_NAME" --generate-notes)
+              run: gh release create "$REF_NAME" --generate-notes
+
 
     release-linux:
         name: release-linux
@@ -50,14 +74,13 @@ jobs:
         permissions:
             contents: write
         steps:
-            - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+            - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
               with:
                 persist-credentials: false
 
             - name: get stable Rust
               uses: actions-rust-lang/setup-rust-toolchain@46268bd060767258de96ed93c1251119784f2ab6 # v1.16.1
               with:
-                  toolchain: stable
                   cache-directories: |
                       ~/.cargo/registry
                       ~/.cargo/bin
@@ -85,14 +108,13 @@ jobs:
         permissions:
             contents: write
         steps:
-            - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+            - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
               with:
                 persist-credentials: false
 
             - name: get stable Rust
               uses: actions-rust-lang/setup-rust-toolchain@46268bd060767258de96ed93c1251119784f2ab6 # v1.16.1
               with:
-                  toolchain: stable
                   target: aarch64-apple-darwin, x86_64-apple-darwin
                   cache-directories: |
                       ~/.cargo/registry
@@ -130,7 +152,7 @@ jobs:
             - release-linux
             - release-macos
         steps:
-            - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+            - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
               with:
                 persist-credentials: false
 
@@ -138,7 +160,8 @@ jobs:
               shell: bash
               run: |
                   curl -sLo formulaic.tgz https://github.com/ceejbot/formulaic/releases/latest/download/formulaic-x86_64-unknown-linux-gnu.tar.gz
-                  tar --strip-components=3 -xf formulaic.tgz ./target/release/formulaic
+                  tar --strip-components=2 -xf formulaic.tgz target/release/formulaic
+                  mv formulaic ~/.cargo/bin/
 
             - name: set ref_name
               shell: bash
@@ -163,7 +186,7 @@ jobs:
                   GITHUB_ACCESS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
               shell: bash
               run: |
-                  formula_file=$(./formulaic ./Cargo.toml)
+                  formula_file=$(formulaic ./Cargo.toml)
                   gh repo clone ceejbot/homebrew-tap
                   cd homebrew-tap || exit 1
                   cp "../$formula_file" Formula/
