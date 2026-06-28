@@ -49,26 +49,21 @@ pub(crate) fn format_item(item: &Item, output: Format) -> String {
     }
 }
 
+/// Collect a list of keys into a `toml_edit` array, shared by the json and toml outputs.
+fn keys_to_array(keys: &[String]) -> toml_edit::Array {
+    keys.iter().map(|k| toml_edit::Value::from(k.as_str())).collect()
+}
+
 /// Format a list of keys according to the output format
 pub(crate) fn format_keys(keys: &[String], output: Format) -> String {
     match output {
         Format::Raw => keys.join("\n"),
-        Format::Json => {
-            // Create a TOML array and use the existing json formatter
-            let toml_keys: Vec<toml_edit::Value> = keys.iter().map(|k| toml_edit::Value::from(k.as_str())).collect();
-            let array = toml_edit::Array::from_iter(toml_keys);
-            let item = Item::Value(Value::Array(array));
-            format_json(&item)
-        }
+        Format::Json => format_json(&Item::Value(Value::Array(keys_to_array(keys)))),
         Format::Bash => {
             let quoted_keys: Vec<String> = keys.iter().map(|k| format!("\"{}\"", k)).collect();
             format!("( {} )", quoted_keys.join(" "))
         }
-        Format::Toml => {
-            let toml_keys: Vec<toml_edit::Value> = keys.iter().map(|k| toml_edit::Value::from(k.as_str())).collect();
-            let array = toml_edit::Array::from_iter(toml_keys);
-            array.to_string().trim().to_string()
-        }
+        Format::Toml => keys_to_array(keys).to_string().trim().to_string(),
     }
 }
 

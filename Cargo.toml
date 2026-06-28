@@ -2,6 +2,7 @@
 name = "tomato-toml"
 version = "1.0.0"
 edition = "2024"
+rust-version = "1.85"
 authors = ["C J Silverio <ceejceej@gmail.com>"]
 description = "🍅 A command-line tool to get and set values in toml files while preserving comments and formatting."
 readme = "README.md"
