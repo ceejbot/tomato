@@ -41,7 +41,7 @@ pub struct Args {
     /// How to format the output: json, toml, bash, or raw
     #[clap(short, long, global = true, default_value = "raw")]
     format: Format,
-    /// Back up the file to <filepath>.bak if we write a new version. This option
+    /// Back up the file to `<filepath>.bak` if we write a new version. This option
     /// is ignored when we're operating on stdin.
     #[clap(long, short, global = true)]
     backup: bool,
@@ -273,7 +273,6 @@ fn traverse_key_path<'a>(
                 // Missing keys are always errors - this function is for strict path traversal
                 return Err(TomatoError::KeyNotFound {
                     key: format!("{}", dotted_key),
-                    suggestion: None,
                 });
             }
         };
@@ -292,7 +291,6 @@ pub fn get_key(toml: &mut DocumentMut, dotted_key: &Keyspec) -> Result<Item, Tom
     if let Item::None = node {
         return Err(TomatoError::KeyNotFound {
             key: format!("{}", dotted_key),
-            suggestion: None,
         });
     }
 

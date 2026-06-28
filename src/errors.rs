@@ -20,7 +20,7 @@ pub enum TomatoError {
         code(tomato::key_not_found),
         help("Check that the key exists and is spelled correctly. Use 'tomato get' to explore available keys.")
     )]
-    KeyNotFound { key: String, suggestion: Option<String> },
+    KeyNotFound { key: String },
 
     #[error("Cannot access property '{property}' on {value_type} value")]
     #[diagnostic(
@@ -82,23 +82,11 @@ pub enum TomatoError {
         plural: String,
     },
 
-    #[error("Quoted string regex cell is unset")]
-    QuotedStringCellUnset,
-
-    #[error("Array regex cell is unset")]
-    ArrayRegexCellUnset,
-
-    #[error("File is not valid TOML: {0:#?}")]
-    InvalidToml(String),
-
     #[error(transparent)]
     IoError(#[from] std::io::Error),
 
     #[error(transparent)]
     TomlError(#[from] toml_edit::TomlError),
-
-    #[error(transparent)]
-    ParseIntError(#[from] std::num::ParseIntError),
 }
 
 fn indefinite_article_for(input: &str) -> &str {
