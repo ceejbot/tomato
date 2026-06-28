@@ -29,9 +29,9 @@ jobs:
               shell: bash
               run: |
                   if [ -n "${INPUTS_REF_NAME}" ]; then
-                    echo "REF_NAME=${INPUTS_REF_NAME}" >> $GITHUB_ENV
+                    echo "REF_NAME=${INPUTS_REF_NAME}" >> "$GITHUB_ENV"
                   else
-                    echo "REF_NAME=${GITHUB_REF_NAME}" >> $GITHUB_ENV
+                    echo "REF_NAME=${GITHUB_REF_NAME}" >> "$GITHUB_ENV"
                   fi
               env:
                 INPUTS_REF_NAME: ${{ inputs.ref_name }}
@@ -41,7 +41,7 @@ jobs:
               env:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
               run: |
-                  release_url=$(gh release create $REF_NAME --generate-notes)
+                  _release_url=$(gh release create "$REF_NAME" --generate-notes)
 
     release-linux:
         name: release-linux
@@ -55,7 +55,7 @@ jobs:
                 persist-credentials: false
 
             - name: get stable Rust
-              uses: actions-rust-lang/setup-rust-toolchain@46268bd060767258de96ed93c1251119784f2ab6 # v1
+              uses: actions-rust-lang/setup-rust-toolchain@46268bd060767258de96ed93c1251119784f2ab6 # v1.16.1
               with:
                   toolchain: stable
                   cache-directories: |
@@ -90,7 +90,7 @@ jobs:
                 persist-credentials: false
 
             - name: get stable Rust
-              uses: actions-rust-lang/setup-rust-toolchain@46268bd060767258de96ed93c1251119784f2ab6 # v1
+              uses: actions-rust-lang/setup-rust-toolchain@46268bd060767258de96ed93c1251119784f2ab6 # v1.16.1
               with:
                   toolchain: stable
                   target: aarch64-apple-darwin, x86_64-apple-darwin
@@ -144,9 +144,9 @@ jobs:
               shell: bash
               run: |
                   if [ -n "${INPUTS_REF_NAME}" ]; then
-                    echo "REF_NAME=${INPUTS_REF_NAME}" >> $GITHUB_ENV
+                    echo "REF_NAME=${INPUTS_REF_NAME}" >> "$GITHUB_ENV"
                   else
-                    echo "REF_NAME=${GITHUB_REF_NAME}" >> $GITHUB_ENV
+                    echo "REF_NAME=${GITHUB_REF_NAME}" >> "$GITHUB_ENV"
                   fi
               env:
                 INPUTS_REF_NAME: ${{ inputs.ref_name }}
