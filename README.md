@@ -58,7 +58,7 @@ What is this 'bash' output format, you ask? It's my best take on making TOML str
 ```bash
 # TOML: fruits = ["apple", "banana", "cherry"]
 $ tomato --format bash get fruits config.toml
-( "apple" "banana" "cherry" )
+( 'apple' 'banana' 'cherry' )
 
 # Use in bash:
 evaluation=$(tomato --format bash get fruits config.toml)
@@ -73,9 +73,9 @@ done
 # TOML: person = { name = "Alice", age = 30, active = true }
 $ tomato --format bash get person config.toml
 declare -A bashval
-bashval[name]="Alice"
-bashval[age]=30
-bashval[active]=1
+bashval['name']='Alice'
+bashval['age']=30
+bashval['active']=1
 
 # Use in bash:
 eval "$(tomato --format bash get person config.toml)"
@@ -85,13 +85,15 @@ echo "Name: ${bashval[name]}, Age: ${bashval[age]}"
 **Key lists** (from `keys` command) use the same array format:
 ```bash
 $ tomato --format bash keys person config.toml
-( "age" "active" "name" )
+( 'age' 'active' 'name' )
 ```
 
 - The associative array is always named `bashval` for consistency.
 - Booleans are expressed as `1` or `0`.
-- Strings are quoted to handle spaces and special characters.
+- Strings and keys are single-quoted, so the output is safe to `eval` even when values contain shell metacharacters like `$`, backticks, or `$(...)`.
 - For complex nested structures, you should fall back to JSON format and pipe to jq. Sometimes bash just can't do it. Don't tell it I said so.
+
+> **Safety note:** string values and keys are single-quoted, so the `bash` output is safe to `eval` even when a value contains shell metacharacters like `$(...)`, backticks, or `$`. The one exception is deeply nested arrays-of-tables, which can't be represented as bash and fall back to TOML — reach for `--format json` and `jq` there.
 
 ### Setting booleans and numbers
 
@@ -119,6 +121,16 @@ true
 ```
 
 ### `stdin` and `stdout`
+
+Omit the file argument to read from `stdin`. This changes how `set`, `rm`, and `append` behave, on the assumption that you're in a shell pipeline: instead of printing the previous value, tomato writes the *modified* document to `stdout` — as JSON if you asked for `--format json`, otherwise as TOML. (The `bash` format is ignored in this mode.) `get`, `exists`, and `keys` read from `stdin` exactly the way they read from a file.
+
+```bash
+# read a value from piped TOML
+cat Cargo.toml | tomato get package.name
+
+# edit in a pipeline: the whole modified document is written to stdout
+cat Cargo.toml | tomato set package.name broccoli
+```
 
 ## Cli usage
 

@@ -340,7 +340,7 @@ strings = ["foo", "bar", "baz"]
 
     let (stdout, _stderr, success) = run_tomato_stdin(&["--format", "bash", "get", "test.strings"], toml_data);
     assert!(success);
-    assert_eq!(stdout.trim(), r#"( "foo" "bar" "baz" )"#);
+    assert_eq!(stdout.trim(), "( 'foo' 'bar' 'baz' )");
 }
 
 #[test]
@@ -353,9 +353,9 @@ inline = { name = "test", value = 42, enabled = true }
     let (stdout, _stderr, success) = run_tomato_stdin(&["--format", "bash", "get", "test.inline"], toml_data);
     assert!(success);
     assert!(stdout.contains("declare -A bashval"));
-    assert!(stdout.contains(r#"bashval[name]="test""#));
-    assert!(stdout.contains("bashval[value]=42"));
-    assert!(stdout.contains("bashval[enabled]=1"));
+    assert!(stdout.contains("bashval['name']='test'"));
+    assert!(stdout.contains("bashval['value']=42"));
+    assert!(stdout.contains("bashval['enabled']=1"));
 }
 
 #[test]
@@ -669,8 +669,8 @@ fn keys_command_bash_format() {
     assert!(success);
     assert!(stdout.contains("( "));
     assert!(stdout.contains(" )"));
-    assert!(stdout.contains("\"catname\""));
-    assert!(stdout.contains("\"fruit\""));
+    assert!(stdout.contains("'catname'"));
+    assert!(stdout.contains("'fruit'"));
 }
 
 #[test]

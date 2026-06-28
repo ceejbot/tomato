@@ -6,7 +6,7 @@ use std::str::FromStr;
 
 use toml_edit::{Item, Value};
 
-use crate::bash::format_bash;
+use crate::bash::{format_bash, shell_quote};
 use crate::errors::TomatoError;
 use crate::json::{self, format_json};
 
@@ -60,7 +60,7 @@ pub(crate) fn format_keys(keys: &[String], output: Format) -> String {
         Format::Raw => keys.join("\n"),
         Format::Json => format_json(&Item::Value(Value::Array(keys_to_array(keys)))),
         Format::Bash => {
-            let quoted_keys: Vec<String> = keys.iter().map(|k| format!("\"{}\"", k)).collect();
+            let quoted_keys: Vec<String> = keys.iter().map(|k| shell_quote(k)).collect();
             format!("( {} )", quoted_keys.join(" "))
         }
         Format::Toml => keys_to_array(keys).to_string().trim().to_string(),
