@@ -7,6 +7,7 @@ on:
         - fixtures/**
         - Cargo.toml
         - Cargo.lock
+        - deny.toml
         - .github/workflows/test.yaml
     pull_request:
         branches: [ "latest" ]
@@ -70,3 +71,46 @@ jobs:
 
             - name: check formatting
               run: cargo +nightly fmt --check --all
+
+    clippy:
+        name: clippy
+        runs-on: ubuntu-latest
+        steps:
+        - name: checkout
+          uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+          with:
+            persist-credentials: false
+
+        - name: sccache-cache
+          uses: mozilla-actions/sccache-action@9e7fa8a12102821edf02ca5dbea1acd0f89a2696
+
+        - name: get stable Rust
+          uses: actions-rust-lang/setup-rust-toolchain@46268bd060767258de96ed93c1251119784f2ab6 # v1.16.1
+          with:
+            toolchain: stable
+            components: clippy
+            cache-directories: |
+                ~/.cargo/registry
+                ~/.cargo/bin
+                target
+
+        - name: run clippy
+          run: cargo clippy --all-targets --all-features -- -D warnings
+
+    deny:
+        name: cargo-deny
+        runs-on: ubuntu-latest
+        # cargo-deny ships a prebuilt binary and never compiles, so drop the
+        # sccache wrapper this job would otherwise inherit from the top-level env.
+        env:
+            RUSTC_WRAPPER: ""
+        steps:
+        - name: checkout
+          uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+          with:
+            persist-credentials: false
+
+        - name: cargo-deny check
+          uses: EmbarkStudios/cargo-deny-action@bb137d7af7e4fb67e5f82a49c4fce4fad40782fe # v2.0.20
+          with:
+            command: check
