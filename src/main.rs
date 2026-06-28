@@ -154,7 +154,11 @@ impl FromStr for TomlVal {
     type Err = TomatoError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let inner = if (s.starts_with('"') && s.ends_with('"')) || (s.starts_with('\'') && s.ends_with('\'')) {
+        // A matching pair of surrounding quotes needs at least two characters; a lone
+        // `"` or `'` is not a quoted-empty-string, it's a literal one-character value.
+        // Guarding on the length keeps the `s[1..s.len() - 1]` slice below from panicking.
+        let is_quoted = |q: char| s.len() >= 2 && s.starts_with(q) && s.ends_with(q);
+        let inner = if is_quoted('"') || is_quoted('\'') {
             // Extract quoted string content
             let content = &s[1..s.len() - 1];
             content.into()
@@ -798,6 +802,19 @@ mod tests {
             _ => {
                 eprintln!("{:?}", floatyval.inner);
                 unreachable!("should have been an integer");
+            }
+        }
+    }
+
+    #[test]
+    fn tomlval_parser_handles_lone_quotes() {
+        // A single quote character must not be mistaken for an empty quoted string:
+        // it should round-trip as a literal one-character value, and must never panic.
+        for lone in ["\"", "'"] {
+            let tval = TomlVal::from_str(lone).expect("a lone quote should parse as a literal string");
+            match tval.inner {
+                Value::String(s) => assert_eq!(*s.value(), lone),
+                _ => unreachable!("a lone quote should be a string, got {:?}", tval.inner),
             }
         }
     }
