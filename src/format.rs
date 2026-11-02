@@ -97,8 +97,8 @@ pub(crate) fn format_raw_value(v: Value) -> String {
         },
         Value::Datetime(dt) => dt.into_value().to_string(),
         Value::Array(array) => array
-            .iter()
-            .map(|xs| format_raw_value(xs.clone()))
+            .into_iter()
+            .map(|xs| format_raw_value(xs))
             .collect::<Vec<String>>()
             .join("\n"),
         Value::InlineTable(_) => json::value_to_json(v).to_string(),
