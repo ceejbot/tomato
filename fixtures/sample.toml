@@ -28,6 +28,7 @@ inline_table = { catname = "Kitsune", fruit = "kumquat", "safe_pet" = true, clas
 # food not algorithms
 [testcases.hashes]
 color = "brown"
+empty_me = ["has", "values"]
 # I want some now!
 favorite = "Hobees DeAnza"
 mats = [ "potatoes", "salt", "oil", "frying" ]

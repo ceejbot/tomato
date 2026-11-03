@@ -380,4 +380,32 @@ mod tests {
             _ => panic!("fetched value was supposed to be a boolean!"),
         }
     }
+
+    #[test]
+    fn can_set_key_to_empty_array() {
+        let toml = include_str!("../fixtures/sample.toml");
+        let mut doc = toml.parse::<DocumentMut>().expect("test doc should be valid toml");
+
+        let key = Keyspec::from_str("testcases.hashes.empty_me").expect("test key should be valid");
+        let newval = Value::from(toml_edit::Array::new());
+
+        let previous = set_key(&mut doc, &key, &newval).unwrap();
+        let prevval = previous
+            .as_value()
+            .expect("the previous value should be a valid toml value");
+        if let Value::Array(_) = prevval {
+            assert_eq!("[\"has\", \"values\"]", format_item(&previous, Format::Toml))
+        } else {
+            panic!("fetched value was supposed to be an array!")
+        }
+        let previous = set_key(&mut doc, &key, &newval).unwrap();
+        let prevval = previous
+            .as_value()
+            .expect("the previous value should be a valid toml value");
+        if let Value::Array(_) = prevval {
+            assert_eq!("[]", format_item(&previous, Format::Toml))
+        } else {
+            panic!("fetched value was supposed to be an array!")
+        }
+    }
 }
