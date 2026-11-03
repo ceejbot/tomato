@@ -43,8 +43,8 @@ fn format_bash_value(v: Value) -> String {
         Value::Datetime(dt) => dt.into_value().to_string(),
         Value::Array(array) => {
             let output = array
-                .iter()
-                .map(|xs| format_bash_value(xs.clone()))
+                .into_iter()
+                .map(|xs| format_bash_value(xs))
                 .collect::<Vec<String>>()
                 .join(" ");
             format!("( {output} )")
@@ -53,8 +53,8 @@ fn format_bash_value(v: Value) -> String {
             // this could be better. probably should add a keyname param all the way up
             // the chain to make this case work
             let mut lines = vec!["declare -A bashval".to_string()];
-            table.iter().for_each(|(k, v)| {
-                lines.push(format!("bashval[{}]={}", shell_quote(k), format_bash_value(v.clone())));
+            table.into_iter().for_each(|(k, v)| {
+                lines.push(format!("bashval[{}]={}", shell_quote(&k), format_bash_value(v)));
             });
             lines.join("\n")
         }

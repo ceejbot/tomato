@@ -136,6 +136,8 @@ impl FromStr for TomlVal {
             Value::from(true)
         } else if s == "false" {
             Value::from(false)
+        } else if s == "[]" {
+            Value::from(toml_edit::Array::new())
         } else if let Ok(v) = i64::from_str(s) {
             Value::from(v)
         } else if let Ok(v) = f64::from_str(s) {

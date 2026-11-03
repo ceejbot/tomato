@@ -37,14 +37,12 @@ pub fn value_to_json(v: Value) -> serde_json::Value {
         Value::Boolean(b) => serde_json::Value::Bool(b.into_value()),
         Value::Datetime(dt) => serde_json::Value::String(dt.into_value().to_string()),
         Value::Array(array) => {
-            let items: Vec<serde_json::Value> = array.iter().map(|xs| value_to_json(xs.clone())).collect();
+            let items: Vec<serde_json::Value> = array.into_iter().map(|xs| value_to_json(xs)).collect();
             serde_json::Value::Array(items)
         }
         Value::InlineTable(table) => {
-            let obj: serde_json::Map<String, serde_json::Value> = table
-                .iter()
-                .map(|(k, v)| (k.to_string(), value_to_json(v.clone())))
-                .collect();
+            let obj: serde_json::Map<String, serde_json::Value> =
+                table.into_iter().map(|(k, v)| (k, value_to_json(v))).collect();
             serde_json::Value::Object(obj)
         }
     }
